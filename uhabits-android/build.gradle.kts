@@ -53,9 +53,16 @@ android {
     defaultConfig {
         versionCode = 20302
         versionName = "2.3.2"
+        // CI passes -PbuildNumber so every fork release installs as an upgrade
+        (findProperty("buildNumber") as String?)?.toInt()?.let {
+            versionCode = versionCode!! * 1000 + it
+            versionName = "$versionName-mine.$it"
+        }
         minSdk = 28
         targetSdk = 36
-        applicationId = "org.isoron.uhabits"
+        applicationId = "org.isoron.uhabits.alex"
+        resValue("string", "application_id", applicationId!!)
+        resValue("string", "launcher_name", "My Habits")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

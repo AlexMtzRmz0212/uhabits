@@ -1,0 +1,45 @@
+# Builds a signed My Habits APK on every push to `mine` and publishes it as a
+# GitHub Release, so Obtainium on the phone can install it as an update.
+name: Release My Habits
+
+on:
+  push:
+    branches: [mine]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore signing key
+        run: echo "${{ secrets.LOOP_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Build signed APK
+        env:
+          LOOP_KEY_ALIAS: ${{ secrets.LOOP_KEY_ALIAS }}
+          LOOP_KEY_PASSWORD: ${{ secrets.LOOP_KEY_PASSWORD }}
+          LOOP_STORE_PASSWORD: ${{ secrets.LOOP_STORE_PASSWORD }}
+          LOOP_KEY_STORE: ${{ runner.temp }}/release.jks
+        run: ./gradlew :uhabits-android:assembleRelease -PbuildNumber=${{ github.run_number }} --console=plain
+
+      - name: Rename APK
+        run: cp uhabits-android/build/outputs/apk/release/uhabits-android-release.apk "my-habits-${{ github.run_number }}.apk"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mine-${{ github.run_number }}
+          name: My Habits build ${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          files: my-habits-${{ github.run_number }}.apk
