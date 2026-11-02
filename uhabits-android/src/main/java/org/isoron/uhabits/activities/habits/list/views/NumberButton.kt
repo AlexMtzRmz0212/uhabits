@@ -45,7 +45,9 @@ data class NumberButtonState(
     val value: Double,
     val completed: Boolean,
     val units: String,
-    val notes: String
+    val notes: String,
+    /** Text to draw instead of the number (used by time-of-day habits). */
+    val label: String? = null
 )
 
 private val BOLD_TYPEFACE = Typeface.create("sans-serif-condensed", Typeface.BOLD)
@@ -155,6 +157,12 @@ class NumberButtonView(
             val textSize: Float
 
             when {
+                state.label != null -> {
+                    label = state.label!!
+                    typeface = BOLD_TYPEFACE
+                    textSize = dim(R.dimen.smallTextSize)
+                }
+
                 state.value == Entry.SKIP.toDouble() / 1000 -> {
                     label = resources.getString(R.string.fa_skipped)
                     textSize = dim(R.dimen.smallTextSize)
@@ -184,6 +192,13 @@ class NumberButtonView(
             pNumber.color = activeColor
             pNumber.typeface = typeface
             pUnit.color = activeColor
+
+            // Long labels, such as "12:57 AM", shrink to fit inside the button.
+            val maxLabelWidth = width * 0.92f
+            val labelWidth = pNumber.measureText(label)
+            if (labelWidth > maxLabelWidth) {
+                pNumber.textSize = textSize * maxLabelWidth / labelWidth
+            }
 
             if (state.units.isBlank()) {
                 // Draw number without units

@@ -26,6 +26,7 @@ import org.isoron.uhabits.core.models.Frequency
 import org.isoron.uhabits.core.models.Habit
 import org.isoron.uhabits.core.models.HabitList
 import org.isoron.uhabits.core.models.HabitMatcher
+import org.isoron.uhabits.core.models.HabitPin
 import org.isoron.uhabits.core.models.HabitType
 import org.isoron.uhabits.core.models.ModelFactory
 import org.isoron.uhabits.core.models.NumericalHabitType
@@ -261,7 +262,9 @@ class SQLiteHabitList(private val modelFactory: ModelFactory) : HabitList() {
                 reminderHour = habit.reminder?.hour,
                 reminderMin = habit.reminder?.minute,
                 reminderDays = habit.reminder?.days?.toInteger() ?: 0,
-                highlight = 0,
+                // The legacy "highlight" column is unused by the app. This fork stores the list pin
+                // of wake-up and bedtime habits in it, which avoids a database migration.
+                highlight = habit.pin.value,
                 archived = if (habit.isArchived) 1 else 0,
                 type = habit.type.value,
                 targetValue = habit.targetValue,
@@ -287,6 +290,7 @@ class SQLiteHabitList(private val modelFactory: ModelFactory) : HabitList() {
             habit.position = data.position
             habit.uuid = data.uuid
             habit.category = data.category
+            habit.pin = HabitPin.fromInt(data.highlight)
             if (data.reminderHour != null && data.reminderMin != null) {
                 habit.reminder = Reminder(
                     data.reminderHour!!,

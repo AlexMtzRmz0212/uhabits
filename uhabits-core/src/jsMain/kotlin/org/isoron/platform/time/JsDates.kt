@@ -80,3 +80,8 @@ class JsLocalDateFormatter(private val locale: String = "en-US") : LocalDateForm
         return Date(Date.UTC(2000, 0, 2 + dayOffset))
     }
 }
+
+actual fun getCurrentMinutesOfDay(): Int {
+    val now = Date()
+    return now.getHours() * 60 + now.getMinutes()
+}

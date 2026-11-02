@@ -27,11 +27,13 @@ import org.isoron.uhabits.core.commands.CreateRepetitionCommand
 import org.isoron.uhabits.core.commands.RenameCategoryCommand
 import org.isoron.uhabits.core.commands.ReorderHabitCommand
 import org.isoron.uhabits.core.commands.ReorderTarget
+import org.isoron.uhabits.core.models.Entry.Companion.UNKNOWN
 import org.isoron.uhabits.core.models.Entry.Companion.YES_MANUAL
 import org.isoron.uhabits.core.models.HabitList
 import org.isoron.uhabits.core.models.HabitType
 import org.isoron.uhabits.core.models.NumericalHabitType.AT_LEAST
 import org.isoron.uhabits.core.models.PaletteColor
+import org.isoron.uhabits.core.models.TimeOfDay
 import org.isoron.uhabits.core.preferences.Preferences
 import org.isoron.uhabits.core.tasks.ExportCSVTask
 import org.isoron.uhabits.core.tasks.Task
@@ -57,7 +59,14 @@ open class ListHabitsBehavior(
     open fun onEdit(habitId: Long, date: LocalDate, x: Float, y: Float) {
         val habit = habitList.getById(habitId) ?: return
         val entry = habit.computedEntries.get(date)
-        if (habit.type == HabitType.NUMERICAL) {
+        if (habit.isTimeOfDay) {
+            val oldMinutes = TimeOfDay.minutesOrNull(habit.originalEntries.get(date).value)
+            screen.showTimePopup(oldMinutes) { newMinutes: Int? ->
+                val value = newMinutes?.let { TimeOfDay.encode(it) } ?: UNKNOWN
+                if (newMinutes != null && newMinutes != oldMinutes) screen.showConfetti(habit.color, x, y)
+                commandRunner.run(CreateRepetitionCommand(habitList, habit, date, value, entry.notes))
+            }
+        } else if (habit.type == HabitType.NUMERICAL) {
             val oldValue = entry.value.toDouble() / 1000
             screen.showNumberPopup(oldValue, entry.notes) { newValue: Double, newNotes: String ->
                 val value = (newValue * 1000).roundToInt()
@@ -178,6 +187,11 @@ open class ListHabitsBehavior(
             value: Double,
             notes: String,
             callback: NumberPickerCallback
+        )
+        /** Asks for a time of day. The callback receives minutes since midnight, or null to clear. */
+        fun showTimePopup(
+            minutes: Int?,
+            callback: (Int?) -> Unit
         )
         fun showCheckmarkPopup(
             selectedValue: Int,

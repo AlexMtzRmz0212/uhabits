@@ -19,6 +19,7 @@
 package org.isoron.uhabits.core.ui.widgets
 
 import dev.mokkery.answering.returns
+import dev.mokkery.matcher.any
 import dev.mokkery.every
 import dev.mokkery.mock
 import dev.mokkery.resetCalls
@@ -30,6 +31,8 @@ import org.isoron.uhabits.core.commands.CreateRepetitionCommand
 import org.isoron.uhabits.core.models.Entry
 import org.isoron.uhabits.core.models.Entry.Companion.nextToggleValue
 import org.isoron.uhabits.core.models.Habit
+import org.isoron.uhabits.core.models.HabitType
+import org.isoron.uhabits.core.models.TimeOfDay
 import org.isoron.uhabits.core.preferences.Preferences
 import org.isoron.uhabits.core.ui.NotificationTray
 import kotlin.test.BeforeTest
@@ -110,6 +113,70 @@ class WidgetBehaviorTest : BaseUnitTest() {
             }
             resetCalls(preferences, commandRunner, notificationTray)
         }
+    }
+
+    private fun timeOfDayHabit(): Habit {
+        val h = fixtures.createEmptyHabit()
+        h.type = HabitType.TIME_OF_DAY
+        behavior.minutesNow = { 7 * 60 + 15 }
+        return h
+    }
+
+    @Test
+    fun testTimeOfDayAddLogsCurrentTime() {
+        val h = timeOfDayHabit()
+        behavior.onAddRepetition(h, today)
+        verify {
+            commandRunner.run(
+                CreateRepetitionCommand(habitList, h, today, TimeOfDay.encode(7 * 60 + 15), "")
+            )
+        }
+        verify { notificationTray.cancel(h) }
+    }
+
+    @Test
+    fun testTimeOfDayAddKeepsExistingTime() {
+        val h = timeOfDayHabit()
+        h.originalEntries.add(Entry(today, TimeOfDay.encode(6 * 60)))
+        behavior.onAddRepetition(h, today)
+        verify(notCalled) { commandRunner.run(any()) }
+    }
+
+    @Test
+    fun testTimeOfDayRemoveClearsTime() {
+        val h = timeOfDayHabit()
+        h.originalEntries.add(Entry(today, TimeOfDay.encode(6 * 60)))
+        behavior.onRemoveRepetition(h, today)
+        verify {
+            commandRunner.run(CreateRepetitionCommand(habitList, h, today, Entry.UNKNOWN, ""))
+        }
+    }
+
+    @Test
+    fun testTimeOfDayToggle() {
+        val h = timeOfDayHabit()
+        behavior.onToggleRepetition(h, today)
+        verify {
+            commandRunner.run(
+                CreateRepetitionCommand(habitList, h, today, TimeOfDay.encode(7 * 60 + 15), "")
+            )
+        }
+        resetCalls(commandRunner, notificationTray)
+
+        h.originalEntries.add(Entry(today, TimeOfDay.encode(7 * 60 + 15)))
+        behavior.onToggleRepetition(h, today)
+        verify {
+            commandRunner.run(CreateRepetitionCommand(habitList, h, today, Entry.UNKNOWN, ""))
+        }
+    }
+
+    @Test
+    fun testTimeOfDayIgnoresIncrementAndDecrement() {
+        val h = timeOfDayHabit()
+        h.originalEntries.add(Entry(today, TimeOfDay.encode(6 * 60)))
+        behavior.onIncrement(h, today, 1000)
+        behavior.onDecrement(h, today, 1000)
+        verify(notCalled) { commandRunner.run(any()) }
     }
 
     @Test

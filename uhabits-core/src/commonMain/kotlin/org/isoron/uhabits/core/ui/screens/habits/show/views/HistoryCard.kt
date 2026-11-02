@@ -31,6 +31,7 @@ import org.isoron.uhabits.core.models.Entry.Companion.YES_MANUAL
 import org.isoron.uhabits.core.models.Habit
 import org.isoron.uhabits.core.models.HabitList
 import org.isoron.uhabits.core.models.PaletteColor
+import org.isoron.uhabits.core.models.TimeOfDay
 import org.isoron.uhabits.core.preferences.Preferences
 import org.isoron.uhabits.core.ui.callbacks.CheckMarkDialogCallback
 import org.isoron.uhabits.core.ui.callbacks.NumberPickerCallback
@@ -64,7 +65,9 @@ class HistoryCardPresenter(
 
     override fun onDateLongPress(date: LocalDate) {
         screen.showFeedback()
-        if (habit.isNumerical) {
+        if (habit.isTimeOfDay) {
+            showTimePopup(date)
+        } else if (habit.isNumerical) {
             showNumberPopup(date)
         } else {
             if (preferences.isShortToggleEnabled) {
@@ -77,7 +80,9 @@ class HistoryCardPresenter(
 
     override fun onDateShortPress(date: LocalDate) {
         screen.showFeedback()
-        if (habit.isNumerical) {
+        if (habit.isTimeOfDay) {
+            showTimePopup(date)
+        } else if (habit.isNumerical) {
             showNumberPopup(date)
         } else {
             if (preferences.isShortToggleEnabled) {
@@ -123,6 +128,14 @@ class HistoryCardPresenter(
                 entry.notes
             )
         )
+    }
+
+    private fun showTimePopup(date: LocalDate) {
+        val entry = habit.originalEntries.get(date)
+        screen.showTimePopup(TimeOfDay.minutesOrNull(entry.value)) { newMinutes: Int? ->
+            val value = newMinutes?.let { TimeOfDay.encode(it) } ?: Entry.UNKNOWN
+            commandRunner.run(CreateRepetitionCommand(habitList, habit, date, value, entry.notes))
+        }
     }
 
     private fun showNumberPopup(date: LocalDate) {
@@ -212,5 +225,8 @@ class HistoryCardPresenter(
             color: PaletteColor,
             callback: CheckMarkDialogCallback
         )
+
+        /** Asks for a time of day. The callback receives minutes since midnight, or null to clear. */
+        fun showTimePopup(minutes: Int?, callback: (Int?) -> Unit)
     }
 }

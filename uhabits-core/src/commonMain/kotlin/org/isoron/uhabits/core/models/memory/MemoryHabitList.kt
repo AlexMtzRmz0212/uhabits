@@ -22,6 +22,7 @@ import org.isoron.platform.Synchronized
 import org.isoron.uhabits.core.models.Habit
 import org.isoron.uhabits.core.models.HabitList
 import org.isoron.uhabits.core.models.HabitMatcher
+import org.isoron.uhabits.core.models.HabitPin
 
 /**
  * In-memory implementation of [HabitList].
@@ -45,9 +46,20 @@ open class MemoryHabitList : HabitList {
             resort()
         }
 
+    /** Habits pinned to the top come first, habits pinned to the bottom come last. */
+    private val pinComparator: Comparator<Habit> = Comparator { h1, h2 ->
+        pinRank(h1).compareTo(pinRank(h2))
+    }
+
+    private fun pinRank(habit: Habit): Int = when (habit.effectivePin) {
+        HabitPin.TOP -> 0
+        HabitPin.NONE -> 1
+        HabitPin.BOTTOM -> 2
+    }
+
     private val categoryComparator: Comparator<Habit> = Comparator { h1, h2 ->
-        val c1 = h1.category.trim()
-        val c2 = h2.category.trim()
+        val c1 = h1.effectiveCategory.trim()
+        val c2 = h2.effectiveCategory.trim()
         when {
             c1.isEmpty() && c2.isEmpty() -> 0
             c1.isEmpty() -> -1
@@ -115,6 +127,10 @@ open class MemoryHabitList : HabitList {
         secondOrder: Order?
     ): Comparator<Habit> {
         return Comparator { h1: Habit, h2: Habit ->
+            val pinResult = pinComparator.compare(h1, h2)
+            if (pinResult != 0) {
+                return@Comparator pinResult
+            }
             val categoryResult = categoryComparator.compare(h1, h2)
             if (categoryResult != 0) {
                 return@Comparator categoryResult

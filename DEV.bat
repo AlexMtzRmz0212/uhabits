@@ -9,7 +9,7 @@ cd /d "%~dp0"
 "%ADB%" get-state >nul 2>&1
 if errorlevel 1 (
     echo Starting emulator...
-    start "Emulator - close this to shut down the phone" /min "%SDK%\emulator\emulator.exe" -avd Pixel_API_34
+    start "Emulator - close this to shut down the phone" /min "%SDK%\emulator\emulator.exe" -avd PocoX7Pro
 )
 
 echo Waiting for the phone to boot...

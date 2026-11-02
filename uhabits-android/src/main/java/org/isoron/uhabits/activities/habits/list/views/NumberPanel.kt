@@ -32,7 +32,9 @@ data class NumberPanelState(
     val color: Int,
     val units: String,
     val notes: List<String>,
-    val buttonCount: Int
+    val buttonCount: Int,
+    /** Optional text drawn instead of each number, one per day (newest first). */
+    val labels: List<String?> = emptyList()
 )
 
 class NumberPanelView(
@@ -88,7 +90,8 @@ class NumberPanelView(
                     when {
                         index + dataOffset < state.notes.size -> state.notes[index + dataOffset]
                         else -> ""
-                    }
+                    },
+                    state.labels.getOrNull(index + dataOffset)
                 )
             )
             button.onEdit = { onEdit(date) }

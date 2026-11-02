@@ -24,6 +24,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatDialogFragment
+import org.isoron.uhabits.HabitsApplication
 import org.isoron.uhabits.R
 import org.isoron.uhabits.core.models.HabitType
 import org.isoron.uhabits.databinding.SelectHabitTypeBinding
@@ -50,6 +51,32 @@ class HabitTypeDialog : AppCompatDialogFragment() {
             startActivity(intent)
             dismiss()
         }
+
+        binding.buttonTimeOfDay.setOnClickListener {
+            val intent = IntentFactory().startEditActivity(requireActivity(), HabitType.TIME_OF_DAY.value)
+            startActivity(intent)
+            dismiss()
+        }
+
+        binding.buttonWakeUp.setOnClickListener {
+            val intent = IntentFactory().startEditActivity(requireActivity(), HabitType.WAKE_UP.value)
+            startActivity(intent)
+            dismiss()
+        }
+
+        binding.buttonBedtime.setOnClickListener {
+            val intent = IntentFactory().startEditActivity(requireActivity(), HabitType.BEDTIME.value)
+            startActivity(intent)
+            dismiss()
+        }
+
+        // Wake up and bedtime habits are unique: once one exists, it is not offered again until
+        // it is deleted.
+        val existing = (requireActivity().application as HabitsApplication).component.habitList
+            .map { it.type }
+            .toSet()
+        if (HabitType.WAKE_UP in existing) binding.buttonWakeUp.visibility = View.GONE
+        if (HabitType.BEDTIME in existing) binding.buttonBedtime.visibility = View.GONE
 
         binding.background.setOnClickListener {
             dismiss()

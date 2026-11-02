@@ -45,6 +45,7 @@ import org.isoron.uhabits.core.ui.screens.habits.list.HabitCardState
 import org.isoron.uhabits.inject.ActivityContext
 import org.isoron.uhabits.utils.currentTheme
 import org.isoron.uhabits.utils.dp
+import org.isoron.uhabits.utils.formatTime
 import org.isoron.uhabits.utils.sres
 
 data class HabitCardViewState(
@@ -84,25 +85,40 @@ class HabitCardView(
             setPrecision(1.0f / 16)
             setColor(c)
         }
-        checkmarkPanel.visibility = when (r.isNumerical) {
+        val showsNumberPanel = r.isNumerical || r.isTimeOfDay
+        checkmarkPanel.visibility = when (showsNumberPanel) {
             true -> View.GONE
             false -> View.VISIBLE
         }
-        numberPanel.visibility = when (r.isNumerical) {
+        numberPanel.visibility = when (showsNumberPanel) {
             true -> View.VISIBLE
             false -> View.GONE
         }
         checkmarkPanel.setState(CheckmarkPanelState(r.checkmarks, c, r.notes, newState.buttonCount))
-        numberPanel.setState(
-            NumberPanelState(
-                r.checkmarks.map { it / 1000.0 },
-                r.completed,
-                c,
-                r.unit,
-                r.notes,
-                newState.buttonCount
+        if (r.isTimeOfDay) {
+            numberPanel.setState(
+                NumberPanelState(
+                    r.minutes.map { if (it >= 0) 1.0 else -1.0 },
+                    r.completed,
+                    c,
+                    "",
+                    r.notes,
+                    newState.buttonCount,
+                    r.minutes.map { if (it >= 0) formatTime(context, it / 60, it % 60) else "--" }
+                )
             )
-        )
+        } else {
+            numberPanel.setState(
+                NumberPanelState(
+                    r.checkmarks.map { it / 1000.0 },
+                    r.completed,
+                    c,
+                    r.unit,
+                    r.notes,
+                    newState.buttonCount
+                )
+            )
+        }
         setSelected(newState.selected)
     }
 
@@ -212,7 +228,7 @@ class HabitCardView(
     private fun getRelativeButtonLocation(date: LocalDate): PointF {
         val today = getToday()
         val offset = date.daysUntil(today) - dataOffset
-        val panel = when (state?.record?.isNumerical == true) {
+        val panel = when (state?.record?.let { it.isNumerical || it.isTimeOfDay } == true) {
             true -> numberPanel
             false -> checkmarkPanel
         }

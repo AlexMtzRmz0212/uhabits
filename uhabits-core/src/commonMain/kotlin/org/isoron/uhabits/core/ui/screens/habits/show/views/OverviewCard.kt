@@ -23,6 +23,7 @@ import org.isoron.platform.time.getToday
 import org.isoron.uhabits.core.models.Entry
 import org.isoron.uhabits.core.models.Habit
 import org.isoron.uhabits.core.models.PaletteColor
+import org.isoron.uhabits.core.models.TimeOfDay
 import org.isoron.uhabits.core.ui.views.Theme
 
 data class OverviewCardState(
@@ -45,7 +46,7 @@ class OverviewCardPresenter {
             val scoreLastMonth = scores[lastMonth].value.toFloat()
             val scoreLastYear = scores[lastYear].value.toFloat()
             val totalCount = habit.originalEntries.getKnown()
-                .filter { it.value == Entry.YES_MANUAL }
+                .filter { it.value == Entry.YES_MANUAL || TimeOfDay.isTime(it.value) }
                 .count()
                 .toLong()
             return OverviewCardState(

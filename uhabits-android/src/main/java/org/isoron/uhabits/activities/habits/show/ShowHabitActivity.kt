@@ -52,6 +52,7 @@ import org.isoron.uhabits.core.ui.views.OnDateClickedListener
 import org.isoron.uhabits.intents.IntentFactory
 import org.isoron.uhabits.utils.applyRootViewInsets
 import org.isoron.uhabits.utils.currentTheme
+import org.isoron.uhabits.utils.showTimeOfDayDialog
 import org.isoron.uhabits.utils.dismissCurrentAndShow
 import org.isoron.uhabits.utils.dismissCurrentDialog
 import org.isoron.uhabits.utils.showMessage
@@ -184,6 +185,10 @@ class ShowHabitActivity : AppCompatActivity(), CommandRunner.Listener {
             }
             dialog.onToggle = { v, n -> callback.onNumberPicked(v, n) }
             dialog.dismissCurrentAndShow(supportFragmentManager, "numberDialog")
+        }
+
+        override fun showTimePopup(minutes: Int?, callback: (Int?) -> Unit) {
+            showTimeOfDayDialog(this@ShowHabitActivity, minutes, callback)
         }
 
         override fun showCheckmarkPopup(

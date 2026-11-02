@@ -20,12 +20,14 @@ package org.isoron.uhabits.core.ui.widgets
 
 import me.tatarka.inject.annotations.Inject
 import org.isoron.platform.time.LocalDate
+import org.isoron.platform.time.getCurrentMinutesOfDay
 import org.isoron.uhabits.core.commands.CommandRunner
 import org.isoron.uhabits.core.commands.CreateRepetitionCommand
 import org.isoron.uhabits.core.models.Entry
 import org.isoron.uhabits.core.models.Entry.Companion.nextToggleValue
 import org.isoron.uhabits.core.models.Habit
 import org.isoron.uhabits.core.models.HabitList
+import org.isoron.uhabits.core.models.TimeOfDay
 import org.isoron.uhabits.core.preferences.Preferences
 import org.isoron.uhabits.core.ui.NotificationTray
 
@@ -36,20 +38,41 @@ class WidgetBehavior(
     private val notificationTray: NotificationTray,
     private val preferences: Preferences
 ) {
+    /** Current time of day in minutes since midnight. Replaceable for tests. */
+    var minutesNow: () -> Int = { getCurrentMinutesOfDay() }
+
+    /**
+     * For time-of-day habits, "checking" logs the current time. A time that was already logged is
+     * kept, so that pressing the button twice does not overwrite it.
+     */
     fun onAddRepetition(habit: Habit, date: LocalDate) {
         notificationTray.cancel(habit)
         val entry = habit.originalEntries.get(date)
+        if (habit.isTimeOfDay) {
+            if (!TimeOfDay.isTime(entry.value)) logCurrentTime(habit, date, entry.notes)
+            return
+        }
         setValue(habit, date, Entry.YES_MANUAL, entry.notes)
     }
 
     fun onRemoveRepetition(habit: Habit, date: LocalDate) {
         notificationTray.cancel(habit)
         val entry = habit.originalEntries.get(date)
-        setValue(habit, date, Entry.NO, entry.notes)
+        val value = if (habit.isTimeOfDay) Entry.UNKNOWN else Entry.NO
+        setValue(habit, date, value, entry.notes)
     }
 
     fun onToggleRepetition(habit: Habit, date: LocalDate) {
         val entry = habit.originalEntries.get(date)
+        if (habit.isTimeOfDay) {
+            if (TimeOfDay.isTime(entry.value)) {
+                setValue(habit, date, Entry.UNKNOWN, entry.notes)
+            } else {
+                logCurrentTime(habit, date, entry.notes)
+            }
+            notificationTray.cancel(habit)
+            return
+        }
         val currentValue = entry.value
         val newValue = nextToggleValue(
             value = currentValue,
@@ -60,7 +83,12 @@ class WidgetBehavior(
         notificationTray.cancel(habit)
     }
 
+    private fun logCurrentTime(habit: Habit, date: LocalDate, notes: String) {
+        setValue(habit, date, TimeOfDay.encode(minutesNow()), notes)
+    }
+
     fun onIncrement(habit: Habit, date: LocalDate, amount: Int) {
+        if (habit.isTimeOfDay) return
         val entry = habit.computedEntries.get(date)
         val currentValue = entry.value
         setValue(habit, date, currentValue + amount, entry.notes)
@@ -68,6 +96,7 @@ class WidgetBehavior(
     }
 
     fun onDecrement(habit: Habit, date: LocalDate, amount: Int) {
+        if (habit.isTimeOfDay) return
         val entry = habit.computedEntries.get(date)
         val currentValue = entry.value
         setValue(habit, date, currentValue - amount, entry.notes)

@@ -117,6 +117,11 @@ class HabitCardListAdapter(
             if (cat.isNotBlank() && cat != lastHeader) {
                 built.add(Row.Category(categoryIdFor(cat), cat))
                 lastHeader = cat
+            } else if (cat.isBlank() && lastHeader != null) {
+                // Uncategorized habits listed after a category (for example, habits pinned to the
+                // bottom) get an empty header so that they do not look like part of that category.
+                built.add(Row.Category(categoryIdFor(""), ""))
+                lastHeader = null
             }
             built.add(Row.Habit(card))
         }
@@ -142,7 +147,7 @@ class HabitCardListAdapter(
 
     fun categoryAt(position: Int): String? {
         return when (val row = rows.getOrNull(position)) {
-            is Row.Category -> row.title
+            is Row.Category -> row.title.ifBlank { null }
             is Row.Habit -> null
             null -> null
         }

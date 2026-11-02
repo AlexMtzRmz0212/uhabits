@@ -32,6 +32,7 @@ data class Habit(
     var id: Long? = null,
     var isArchived: Boolean = false,
     var name: String = "",
+    var pin: HabitPin = HabitPin.NONE,
     var position: Int = 0,
     var question: String = "",
     var reminder: Reminder? = null,
@@ -54,6 +55,21 @@ data class Habit(
     val isNumerical: Boolean
         get() = type == HabitType.NUMERICAL
 
+    val isTimeOfDay: Boolean
+        get() = type.isTimeOfDay
+
+    /**
+     * The list pin that is actually honored. Only wake-up and bedtime habits can be pinned; the
+     * stored value is ignored for other habits (for example, old backups with legacy data in the
+     * column that holds the pin).
+     */
+    val effectivePin: HabitPin
+        get() = if (type == HabitType.WAKE_UP || type == HabitType.BEDTIME) pin else HabitPin.NONE
+
+    /** The category used for grouping in the list. Pinned habits are never grouped. */
+    val effectiveCategory: String
+        get() = if (effectivePin == HabitPin.NONE) category else ""
+
     val uriString: String
         get() = "content://org.isoron.uhabits/habit/$id"
 
@@ -75,7 +91,7 @@ data class Habit(
 
     fun recompute() {
         computedEntries.recomputeFrom(
-            originalEntries = originalEntries,
+            originalEntries = if (isTimeOfDay) timeEntriesAsYesNo() else originalEntries,
             frequency = frequency,
             isNumerical = isNumerical
         )
@@ -113,6 +129,36 @@ data class Habit(
         )
     }
 
+    /**
+     * For time-of-day habits, [targetValue] holds the target in minutes since midnight and
+     * [targetType] says whether the logged time must be at least (after) or at most (before) the
+     * target. A target of zero means there is no target.
+     */
+    fun meetsTimeTarget(minutes: Int): Boolean = when {
+        targetValue <= 0.0 -> true
+        targetType == NumericalHabitType.AT_MOST -> minutes <= targetValue
+        else -> minutes >= targetValue
+    }
+
+    /**
+     * Time-of-day habits are scored like yes/no habits: a day with a logged time that meets the
+     * target counts as done, and a day with a logged time that misses it counts as not done. This
+     * returns a copy of the original entries where each logged time becomes YES_MANUAL or NO.
+     */
+    private fun timeEntriesAsYesNo(): EntryList {
+        val result = EntryList()
+        for (entry in originalEntries.getKnown()) {
+            val minutes = TimeOfDay.minutesOrNull(entry.value)
+            val value = when {
+                minutes == null -> entry.value
+                meetsTimeTarget(minutes) -> Entry.YES_MANUAL
+                else -> Entry.NO
+            }
+            result.add(entry.copy(value = value))
+        }
+        return result
+    }
+
     fun copyFrom(other: Habit) {
         this.category = other.category
         this.color = other.color
@@ -121,6 +167,7 @@ data class Habit(
         // this.id should not be copied
         this.isArchived = other.isArchived
         this.name = other.name
+        this.pin = other.pin
         this.position = other.position
         this.question = other.question
         this.reminder = other.reminder
@@ -142,6 +189,7 @@ data class Habit(
         if (id != other.id) return false
         if (isArchived != other.isArchived) return false
         if (name != other.name) return false
+        if (pin != other.pin) return false
         if (position != other.position) return false
         if (question != other.question) return false
         if (reminder != other.reminder) return false
@@ -162,6 +210,7 @@ data class Habit(
         result = 31 * result + (id?.hashCode() ?: 0)
         result = 31 * result + isArchived.hashCode()
         result = 31 * result + name.hashCode()
+        result = 31 * result + pin.hashCode()
         result = 31 * result + position
         result = 31 * result + question.hashCode()
         result = 31 * result + (reminder?.hashCode() ?: 0)

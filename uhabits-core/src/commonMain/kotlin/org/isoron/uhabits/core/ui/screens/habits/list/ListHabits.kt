@@ -23,6 +23,7 @@ import org.isoron.uhabits.core.models.HabitList
 import org.isoron.uhabits.core.models.HabitList.Order
 import org.isoron.uhabits.core.models.HabitMatcher
 import org.isoron.uhabits.core.models.PaletteColor
+import org.isoron.uhabits.core.models.TimeOfDay
 import org.isoron.uhabits.core.ui.views.Theme
 
 data class ListHabitsState(
@@ -67,7 +68,14 @@ object ListHabitsPresenter {
                     checkmarks = entries.map { it.value },
                     completed = entries.map { it.completed },
                     notes = entries.map { it.notes },
-                    category = habit.category
+                    category = habit.effectiveCategory,
+                    isTimeOfDay = habit.isTimeOfDay,
+                    minutes = if (habit.isTimeOfDay) {
+                        habit.originalEntries.getByInterval(dateFrom, today)
+                            .map { TimeOfDay.minutesOrNull(it.value) ?: -1 }
+                    } else {
+                        emptyList()
+                    }
                 )
             )
         }
@@ -94,5 +102,8 @@ data class HabitCardState(
     val checkmarks: List<Int>,
     val completed: List<Boolean>,
     val notes: List<String>,
-    val category: String
+    val category: String,
+    val isTimeOfDay: Boolean = false,
+    /** For time-of-day habits: minutes since midnight of each entry, or -1 if none. */
+    val minutes: List<Int> = emptyList()
 )

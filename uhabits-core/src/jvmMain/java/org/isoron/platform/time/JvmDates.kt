@@ -12,3 +12,8 @@ actual fun computeToday(hourOffset: Int, minuteOffset: Int): LocalDate {
     val daysSince2000 = (daysSinceEpoch - 10957).toInt()
     return LocalDate(daysSince2000)
 }
+
+actual fun getCurrentMinutesOfDay(): Int {
+    val now = java.util.Calendar.getInstance()
+    return now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+}

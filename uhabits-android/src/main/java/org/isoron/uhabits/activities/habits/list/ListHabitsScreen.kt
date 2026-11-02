@@ -82,6 +82,7 @@ import org.isoron.uhabits.utils.restartWithFade
 import org.isoron.uhabits.utils.showMessage
 import org.isoron.uhabits.utils.showSendEmailScreen
 import org.isoron.uhabits.utils.showSendFileScreen
+import org.isoron.uhabits.utils.showTimeOfDayDialog
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -319,6 +320,10 @@ class ListHabitsScreen(
         }
         dialog.onToggle = { v, n -> callback.onNumberPicked(v, n) }
         dialog.dismissCurrentAndShow(fm, "numberDialog")
+    }
+
+    override fun showTimePopup(minutes: Int?, callback: (Int?) -> Unit) {
+        showTimeOfDayDialog(context, minutes, callback)
     }
 
     override fun showCheckmarkPopup(

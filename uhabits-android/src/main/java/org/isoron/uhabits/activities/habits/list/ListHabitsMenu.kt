@@ -46,14 +46,6 @@ class ListHabitsMenu(
     val activity = context as AppCompatActivity
     private var menu: Menu? = null
 
-    companion object {
-        private const val SEARCH_BOX_MAX_WIDTH_DP = 160f
-        private const val SEARCH_BOX_MIN_WIDTH_DP = 72f
-
-        // Space kept for the "Habits" title (~120dp) and the +, filter and overflow buttons (3 x 48dp).
-        private const val RESERVED_TOOLBAR_DP = 264f
-    }
-
     fun onCreate(inflater: MenuInflater, menu: Menu) {
         this.menu = menu
         menu.clear()
@@ -81,12 +73,13 @@ class ListHabitsMenu(
         val searchContainer = menu.findItem(R.id.actionSearchContainer)
         with(searchContainer.actionView as SearchView) {
             queryHint = activity.getString(R.string.search)
-            setIconifiedByDefault(false)
-            val density = resources.displayMetrics.density
-            val screenWidthDp = resources.displayMetrics.widthPixels / density
-            val availableDp = screenWidthDp - RESERVED_TOOLBAR_DP
-            maxWidth = (availableDp.coerceIn(SEARCH_BOX_MIN_WIDTH_DP, SEARCH_BOX_MAX_WIDTH_DP) * density).toInt()
-            setQuery(behavior.searchQuery, false)
+            maxWidth = Int.MAX_VALUE
+            // The menu is rebuilt on many actions; keep the search bar open if a query is active.
+            if (behavior.searchQuery.isNotEmpty()) {
+                searchContainer.expandActionView()
+                setQuery(behavior.searchQuery, false)
+            }
+            // Collapsing the bar clears the query, which restores the full list.
             setOnQueryTextListener(object : SearchView.OnQueryTextListener {
                 override fun onQueryTextSubmit(query: String) = false
                 override fun onQueryTextChange(newText: String): Boolean {

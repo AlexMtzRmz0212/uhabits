@@ -67,6 +67,63 @@
             android:text="@string/measurable_example" />
     </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/buttonTimeOfDay"
+        style="@style/SelectHabitTypeButton">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/SelectHabitTypeButtonTitle"
+            android:text="@string/time_of_day" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/SelectHabitTypeButtonBody"
+            android:text="@string/time_of_day_example" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/buttonWakeUp"
+        style="@style/SelectHabitTypeButton">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/SelectHabitTypeButtonTitle"
+            android:text="@string/wake_up" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/SelectHabitTypeButtonBody"
+            android:text="@string/wake_up_example" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/buttonBedtime"
+        style="@style/SelectHabitTypeButton">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/SelectHabitTypeButtonTitle"
+            android:text="@string/bedtime" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/SelectHabitTypeButtonBody"
+            android:text="@string/bedtime_example" />
+    </LinearLayout>
+
 <!--    <LinearLayout-->
 <!--        android:layout_width="match_parent"-->
 <!--        android:layout_height="wrap_content"-->

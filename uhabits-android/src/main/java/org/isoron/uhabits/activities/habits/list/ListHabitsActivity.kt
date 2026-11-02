@@ -35,6 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import org.isoron.platform.time.LocalDate
 import org.isoron.uhabits.BaseExceptionHandler
 import org.isoron.uhabits.HabitsApplication
+import org.isoron.uhabits.R
 import org.isoron.uhabits.core.preferences.Preferences
 import org.isoron.uhabits.core.tasks.TaskRunner
 import org.isoron.uhabits.core.ui.ThemeSwitcher.Companion.THEME_DARK
@@ -157,7 +158,8 @@ class ListHabitsActivity : AppCompatActivity(), Preferences.Listener {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        invalidateOptionsMenu()
+        // Rebuilding the menu here would collapse the search bar the tap is about to expand.
+        if (item.itemId != R.id.actionSearchContainer) invalidateOptionsMenu()
         return menu.onItemSelected(item)
     }
 

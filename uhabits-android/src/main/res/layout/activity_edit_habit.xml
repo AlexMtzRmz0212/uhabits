@@ -227,6 +227,34 @@
                 </LinearLayout>
             </FrameLayout>
 
+            <FrameLayout
+                android:id="@+id/timeTargetOuterBox"
+                android:visibility="gone"
+                style="@style/FormOuterBox">
+                <LinearLayout style="@style/FormInnerBox">
+                    <TextView
+                        style="@style/FormLabel"
+                        android:text="@string/target" />
+                    <TextView
+                        style="@style/FormDropdown"
+                        android:id="@+id/timeTargetPicker"
+                        android:textColor="?attr/contrast100"
+                        />
+                </LinearLayout>
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/pinOuterBox"
+                android:visibility="gone"
+                style="@style/FormOuterBox">
+                <LinearLayout style="@style/FormInnerBox">
+                    <CheckBox
+                        android:id="@+id/pinCheckbox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="?attr/contrast100" />
+                </LinearLayout>
+            </FrameLayout>
 
             <!-- Reminder -->
             <FrameLayout style="@style/FormOuterBox">

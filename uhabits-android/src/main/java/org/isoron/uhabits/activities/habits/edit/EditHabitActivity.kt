@@ -46,6 +46,7 @@ import org.isoron.uhabits.core.commands.CreateHabitCommand
 import org.isoron.uhabits.core.commands.EditHabitCommand
 import org.isoron.uhabits.core.models.Frequency
 import org.isoron.uhabits.core.models.Habit
+import org.isoron.uhabits.core.models.HabitPin
 import org.isoron.uhabits.core.models.HabitType
 import org.isoron.uhabits.core.models.NumericalHabitType
 import org.isoron.uhabits.core.models.PaletteColor
@@ -57,6 +58,7 @@ import org.isoron.uhabits.utils.applyRootViewInsets
 import org.isoron.uhabits.utils.applyToolbarInsets
 import org.isoron.uhabits.utils.dismissCurrentAndShow
 import org.isoron.uhabits.utils.formatTime
+import org.isoron.uhabits.utils.showTimeOfDayDialog
 import org.isoron.uhabits.utils.toFormattedString
 
 fun formatFrequency(freqNum: Int, freqDen: Int, resources: Resources) = when {
@@ -87,6 +89,12 @@ class EditHabitActivity : AppCompatActivity() {
     var reminderDays: WeekdayList = WeekdayList.EVERY_DAY
     var targetType = NumericalHabitType.AT_LEAST
 
+    /** Target of a time-of-day habit, in minutes since midnight. Zero means no target. */
+    var timeTargetMinutes = 0
+
+    /** Whether a wake-up or bedtime habit is pinned to the top or bottom of the list. */
+    var pinned = false
+
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
 
@@ -109,6 +117,8 @@ class EditHabitActivity : AppCompatActivity() {
             freqNum = habit.frequency.numerator
             freqDen = habit.frequency.denominator
             targetType = habit.targetType
+            if (habit.isTimeOfDay) timeTargetMinutes = habit.targetValue.toInt().coerceAtLeast(0)
+            pinned = habit.pin != HabitPin.NONE
             habit.reminder?.let {
                 reminderHour = it.hour
                 reminderMin = it.minute
@@ -122,6 +132,11 @@ class EditHabitActivity : AppCompatActivity() {
             binding.targetInput.setText(habit.targetValue.toString())
         } else {
             habitType = HabitType.fromInt(intent.getIntExtra("habitType", HabitType.YES_NO.value))
+            when (habitType) {
+                HabitType.WAKE_UP -> binding.nameInput.setText(R.string.wake_up)
+                HabitType.BEDTIME -> binding.nameInput.setText(R.string.bedtime)
+                else -> {}
+            }
         }
 
         if (state != null) {
@@ -133,15 +148,31 @@ class EditHabitActivity : AppCompatActivity() {
             reminderHour = state.getInt("reminderHour")
             reminderMin = state.getInt("reminderMin")
             reminderDays = WeekdayList(state.getInt("reminderDays"))
+            timeTargetMinutes = state.getInt("timeTargetMinutes")
+            pinned = state.getBoolean("pinned")
+            targetType = NumericalHabitType.fromInt(state.getInt("targetType"))
         }
 
         updateColors()
+        binding.pinCheckbox.isChecked = pinned
 
         when (habitType) {
-            HabitType.YES_NO -> {
+            HabitType.YES_NO, HabitType.TIME_OF_DAY, HabitType.WAKE_UP, HabitType.BEDTIME -> {
                 binding.unitOuterBox.visibility = View.GONE
                 binding.targetOuterBox.visibility = View.GONE
                 binding.targetTypeOuterBox.visibility = View.GONE
+                if (habitType.isTimeOfDay) {
+                    binding.nameInput.hint = getString(R.string.time_of_day_short_example)
+                    binding.questionInput.hint = getString(R.string.time_of_day_question_example)
+                    binding.frequencyOuterBox.visibility = View.GONE
+                    binding.timeTargetOuterBox.visibility = View.VISIBLE
+                }
+                if (habitType == HabitType.WAKE_UP || habitType == HabitType.BEDTIME) {
+                    binding.pinOuterBox.visibility = View.VISIBLE
+                    binding.pinCheckbox.setText(
+                        if (habitType == HabitType.WAKE_UP) R.string.pin_to_top else R.string.pin_to_bottom
+                    )
+                }
             }
             HabitType.NUMERICAL -> {
                 binding.nameInput.hint = getString(R.string.measurable_short_example)
@@ -174,6 +205,36 @@ class EditHabitActivity : AppCompatActivity() {
                 populateFrequency()
             }
             picker.dismissCurrentAndShow(supportFragmentManager, "frequencyPicker")
+        }
+
+        populateTimeTarget()
+        binding.timeTargetPicker.setOnClickListener {
+            val builder = AlertDialog.Builder(this)
+            val arrayAdapter = ArrayAdapter<String>(this, android.R.layout.select_dialog_item)
+            arrayAdapter.add(getString(R.string.time_target_choose_before))
+            arrayAdapter.add(getString(R.string.time_target_choose_after))
+            arrayAdapter.add(getString(R.string.time_target_none))
+            builder.setAdapter(arrayAdapter) { dialog, which ->
+                dialog.dismiss()
+                if (which == 2) {
+                    timeTargetMinutes = 0
+                    populateTimeTarget()
+                } else {
+                    val type = if (which == 0) NumericalHabitType.AT_MOST else NumericalHabitType.AT_LEAST
+                    val initial = if (timeTargetMinutes > 0) timeTargetMinutes else DEFAULT_TARGET_MINUTES
+                    showTimeOfDayDialog(this, initial) { minutes ->
+                        // Zero means "no target", so a target of exactly midnight becomes 00:01.
+                        timeTargetMinutes = when (minutes) {
+                            null -> 0
+                            0 -> 1
+                            else -> minutes
+                        }
+                        targetType = type
+                        populateTimeTarget()
+                    }
+                }
+            }
+            builder.create().dismissCurrentAndShow()
         }
 
         populateTargetType()
@@ -288,6 +349,16 @@ class EditHabitActivity : AppCompatActivity() {
             habit.targetType = targetType
             habit.unit = binding.unitInput.text.trim().toString()
         }
+        if (habitType.isTimeOfDay) {
+            habit.targetValue = timeTargetMinutes.toDouble()
+            habit.targetType = targetType
+        }
+        habit.pin = when {
+            !binding.pinCheckbox.isChecked -> HabitPin.NONE
+            habitType == HabitType.WAKE_UP -> HabitPin.TOP
+            habitType == HabitType.BEDTIME -> HabitPin.BOTTOM
+            else -> HabitPin.NONE
+        }
         habit.type = habitType
 
         val command = if (habitId >= 0) {
@@ -347,6 +418,19 @@ class EditHabitActivity : AppCompatActivity() {
         }
     }
 
+    private fun populateTimeTarget() {
+        binding.timeTargetPicker.text = if (timeTargetMinutes <= 0) {
+            getString(R.string.time_target_none)
+        } else {
+            val time = formatTime(this, timeTargetMinutes / 60, timeTargetMinutes % 60)
+            val template = when (targetType) {
+                NumericalHabitType.AT_MOST -> R.string.time_target_before
+                else -> R.string.time_target_after
+            }
+            getString(template, time)
+        }
+    }
+
     private fun populateTargetType() {
         binding.targetTypePicker.text = when (targetType) {
             NumericalHabitType.AT_MOST -> getString(R.string.target_type_at_most)
@@ -380,6 +464,13 @@ class EditHabitActivity : AppCompatActivity() {
             putInt("reminderHour", reminderHour)
             putInt("reminderMin", reminderMin)
             putInt("reminderDays", reminderDays.toInteger())
+            putInt("timeTargetMinutes", timeTargetMinutes)
+            putBoolean("pinned", binding.pinCheckbox.isChecked)
+            putInt("targetType", targetType.value)
         }
+    }
+
+    companion object {
+        private const val DEFAULT_TARGET_MINUTES = 8 * 60
     }
 }
