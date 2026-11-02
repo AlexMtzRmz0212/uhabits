@@ -45,7 +45,10 @@ class ListHabitsMenu(
 ) {
     val activity = context as AppCompatActivity
     private var menu: Menu? = null
-    private var isSearchActive = false
+
+    companion object {
+        private const val SEARCH_BOX_MAX_WIDTH_DP = 160
+    }
 
     fun onCreate(inflater: MenuInflater, menu: Menu) {
         this.menu = menu
@@ -72,11 +75,10 @@ class ListHabitsMenu(
 
     private fun createSearchBar(menu: Menu) {
         val searchContainer = menu.findItem(R.id.actionSearchContainer)
-        searchContainer.isVisible = isSearchActive
-        menu.setGroupVisible(R.id.actionItems, !isSearchActive)
         with(searchContainer.actionView as SearchView) {
             queryHint = activity.getString(R.string.search)
-            isIconified = false
+            setIconifiedByDefault(false)
+            maxWidth = (SEARCH_BOX_MAX_WIDTH_DP * resources.displayMetrics.density).toInt()
             setQuery(behavior.searchQuery, false)
             setOnQueryTextListener(object : SearchView.OnQueryTextListener {
                 override fun onQueryTextSubmit(query: String) = false
@@ -85,12 +87,6 @@ class ListHabitsMenu(
                     return true
                 }
             })
-            setOnCloseListener {
-                isSearchActive = false
-                menu.setGroupVisible(R.id.actionItems, true)
-                activity.invalidateOptionsMenu()
-                true
-            }
         }
     }
 
@@ -177,12 +173,6 @@ class ListHabitsMenu(
 
             R.id.actionSortStatus -> {
                 behavior.onSortByStatus()
-                return true
-            }
-
-            R.id.actionSearch -> {
-                isSearchActive = true
-                activity.invalidateOptionsMenu()
                 return true
             }
 

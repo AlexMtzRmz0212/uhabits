@@ -77,10 +77,6 @@
                             android:title="@string/by_status"/>
                     </menu>
                 </item>
-                <item
-                    android:id="@+id/actionSearch"
-                    android:enabled="true"
-                    android:title="@string/search"/>
             </menu>
         </item>
 

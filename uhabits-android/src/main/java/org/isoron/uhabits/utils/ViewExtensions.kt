@@ -239,7 +239,7 @@ fun Dialog.dimBehind() {
     window?.setDimAmount(0.5f)
 }
 
-fun View.requestFocusWithKeyboard() {
+fun View.requestFocusWithKeyboard(selectAll: Boolean = false) {
     // For some reason, Android does not open the soft keyboard by default when view.requestFocus
     // is called. Several online solutions suggest using InputMethodManager, but these solutions
     // are not reliable; sometimes the keyboard does not show, and sometimes it does not go away
@@ -249,7 +249,9 @@ fun View.requestFocusWithKeyboard() {
         val time = SystemClock.uptimeMillis()
         dispatchTouchEvent(MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, 0f, 0f, 0))
         dispatchTouchEvent(MotionEvent.obtain(time, time, MotionEvent.ACTION_UP, 0f, 0f, 0))
-        if (this is EditText) setSelection(length())
+        if (this is EditText) {
+            if (selectAll) selectAll() else setSelection(length())
+        }
     }, 250)
 }
 

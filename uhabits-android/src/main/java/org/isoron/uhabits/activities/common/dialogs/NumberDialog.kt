@@ -84,7 +84,7 @@ class NumberDialog : AppCompatDialogFragment() {
             save()
             true
         }
-        view.value.requestFocusWithKeyboard()
+        view.value.requestFocusWithKeyboard(selectAll = true)
         val dialog = Dialog(requireContext())
         dialog.setContentView(view.root)
         dialog.window?.apply {
