@@ -144,6 +144,8 @@
     <string name="no_sync_folder_selected">Not syncing. Pick a folder shared with your other devices.</string>
     <string name="sync_now">Sync now</string>
     <string name="sync_never">Not synced yet</string>
+    <string name="sync_running">Syncing…</string>
+    <string name="sync_last">Last synced %1$s · %2$s</string>
     <string name="bug_report_failed">Failed to generate bug report.</string>
     <string name="generate_bug_report">Generate bug report</string>
     <string name="troubleshooting">Troubleshooting</string>

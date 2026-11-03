@@ -40,6 +40,7 @@ class SyncManager(context: Context) {
     fun syncNow() = synchronized(lock) {
         val uri = folderUri ?: return@synchronized
         lastStart.set(System.currentTimeMillis())
+        prefs.edit().putBoolean(PREF_RUNNING, true).apply()
         try {
             val component = HabitsApplication.component
             val factory = component.modelFactory as SQLModelFactory
@@ -56,16 +57,32 @@ class SyncManager(context: Context) {
 
             if (report.changed) refreshAfterMerge(component.habitList as SQLiteHabitList)
             saveStatus(
-                if (report.errors.isEmpty()) {
-                    "OK"
-                } else {
-                    "Skipped: " + report.errors.joinToString("; ")
-                }
+                describe(report)
             )
         } catch (e: Exception) {
             Log.e(TAG, "Sync failed", e)
             saveStatus("Failed: ${e.message ?: e.javaClass.simpleName}")
+        } finally {
+            // An Error (such as out of memory) skips the handlers above; never leave "Syncing…" stuck.
+            prefs.edit().putBoolean(PREF_RUNNING, false).apply()
         }
+    }
+
+    /** What happened, in words the settings screen can show: it must say if the other device's file was not found. */
+    private fun describe(report: org.isoron.uhabits.core.sync.SyncReport): String {
+        val parts = mutableListOf<String>()
+        parts.add(if (report.changed) "got ${report.applied} changes" else "up to date")
+        parts.add(
+            when (report.peersSeen) {
+                0 -> "no other device's file found"
+                1 -> "1 other file seen"
+                else -> "${report.peersSeen} other files seen"
+            }
+        )
+        if (report.unreadable > 0) parts.add("${report.unreadable} could not be read")
+        parts.addAll(report.peerInfo)
+        report.errors.forEach { parts.add("skipped $it") }
+        return parts.joinToString(", ")
     }
 
     private fun refreshAfterMerge(habitList: SQLiteHabitList) {
@@ -82,6 +99,7 @@ class SyncManager(context: Context) {
         prefs.edit()
             .putLong(PREF_LAST_TIME, System.currentTimeMillis())
             .putString(PREF_STATUS, result)
+            .putBoolean(PREF_RUNNING, false)
             .apply()
     }
 
@@ -89,6 +107,7 @@ class SyncManager(context: Context) {
         const val PREF_FOLDER = "syncFolder"
         const val PREF_LAST_TIME = "syncLastTime"
         const val PREF_STATUS = "syncStatus"
+        const val PREF_RUNNING = "syncRunning"
         private const val FIRST_SYNC_BACKUP = "first_sync_backup"
         private const val TAG = "SyncManager"
         private const val JOB_ID = 4271

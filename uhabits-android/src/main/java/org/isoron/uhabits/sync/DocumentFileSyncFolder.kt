@@ -45,6 +45,12 @@ class DocumentFileSyncFolder(private val context: Context, treeUri: Uri) : SyncF
         }
     }
 
+    override fun describe(name: String): String? {
+        val file = dir.findFile(name) ?: return "not found"
+        val modified = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(file.lastModified())
+        return "${file.length()} bytes, modified $modified"
+    }
+
     override fun write(name: String, text: String) {
         var file = dir.findFile(name)
         if (file == null) {

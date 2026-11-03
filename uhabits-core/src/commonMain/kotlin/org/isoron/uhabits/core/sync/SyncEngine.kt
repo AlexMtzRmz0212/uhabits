@@ -10,13 +10,22 @@ interface SyncFolder {
     fun listFiles(): List<String>
     fun read(name: String): String?
     fun write(name: String, text: String)
+
+    /** Short text about the file on disk (size, date), for diagnosing sync problems. */
+    fun describe(name: String): String? = null
 }
 
 data class SyncReport(
     val peersMerged: Int,
     val applied: Int,
     val wroteOwnFile: Boolean,
-    val errors: List<String>
+    val errors: List<String>,
+    /** How many other devices' files were in the folder. */
+    val peersSeen: Int = 0,
+    /** How many of those could not be read (for example, still being uploaded). */
+    val unreadable: Int = 0,
+    /** One line per other device's file: what is on disk and how much of it was read. */
+    val peerInfo: List<String> = emptyList()
 ) {
     val changed: Boolean get() = applied > 0
 }
@@ -38,10 +47,19 @@ class SyncEngine(
     fun syncOnce(): SyncReport {
         var peers = 0
         var applied = 0
+        var seen = 0
+        var unreadable = 0
+        val peerInfo = mutableListOf<String>()
         val errors = mutableListOf<String>()
 
         for (name in folder.listFiles().filter { it.endsWith(FILE_SUFFIX) && it != ownFileName }) {
-            val text = folder.read(name) ?: continue
+            seen++
+            val text = folder.read(name)
+            peerInfo.add("${name.take(6)}: ${folder.describe(name) ?: "?"}, read ${text?.length ?: 0} chars")
+            if (text == null) {
+                unreadable++
+                continue
+            }
             val hash = hash(text)
             if (sync.getState(PEER_HASH + name) == hash) continue
             try {
@@ -61,7 +79,7 @@ class SyncEngine(
             folder.write(ownFileName, text)
             sync.setState(OWN_HASH, hash)
         }
-        return SyncReport(peers, applied, wrote, errors)
+        return SyncReport(peers, applied, wrote, errors, seen, unreadable, peerInfo)
     }
 
     companion object {

@@ -17,6 +17,7 @@ junitJupiter = "5.10.1"
 junitVersion = "4.13.2"
 konfetti-xml = "2.0.2"
 kotlin = "2.3.20"
+compose-multiplatform = "1.10.3"
 ksp = "2.3.6"
 ktlint-plugin = "11.6.1"
 ktor = "1.6.8"
@@ -71,6 +72,8 @@ uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", versi
 documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile" }
 
 [plugins]
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 agp = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

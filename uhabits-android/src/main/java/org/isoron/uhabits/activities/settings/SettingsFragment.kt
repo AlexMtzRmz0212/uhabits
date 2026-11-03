@@ -164,8 +164,8 @@ class SettingsFragment : PreferenceFragmentCompat(), OnSharedPreferenceChangeLis
                 return true
             }
             "syncNow" -> {
+                sharedPrefs?.edit()?.putBoolean(SyncManager.PREF_RUNNING, true)?.apply()
                 SyncManager.requestSync(requireContext(), minGapMillis = 0)
-                findPreference("syncNow").summary = getString(R.string.sync_now) + "…"
                 return true
             }
             "publicBackupFolder" -> {
@@ -213,6 +213,7 @@ class SettingsFragment : PreferenceFragmentCompat(), OnSharedPreferenceChangeLis
         sharedPreferences: SharedPreferences,
         key: String?
     ) {
+        if (key in SYNC_STATUS_KEYS && isAdded) updateSyncSummaries()
         if (key == "pref_widget_opacity" && widgetUpdater != null) {
             Log.d("SettingsFragment", "updating widgets")
             widgetUpdater!!.updateWidgets()
@@ -264,13 +265,16 @@ class SettingsFragment : PreferenceFragmentCompat(), OnSharedPreferenceChangeLis
         val nowPref = findPreference("syncNow")
         val uri = manager.folderUri
         folderPref.summary = if (uri == null) getString(R.string.no_sync_folder_selected) else (fullPathFor(uri) ?: uri.toString())
-        nowPref.isEnabled = uri != null
+        val running = sharedPrefs?.getBoolean(SyncManager.PREF_RUNNING, false) ?: false
+        nowPref.isEnabled = uri != null && !running
         val last = sharedPrefs?.getLong(SyncManager.PREF_LAST_TIME, 0L) ?: 0L
-        nowPref.summary = if (last == 0L) {
-            getString(R.string.sync_never)
-        } else {
-            val time = android.text.format.DateUtils.getRelativeTimeSpanString(last).toString()
-            "$time · ${manager.statusText ?: ""}"
+        nowPref.summary = when {
+            running -> getString(R.string.sync_running)
+            last == 0L -> getString(R.string.sync_never)
+            else -> {
+                val time = android.text.format.DateUtils.getRelativeTimeSpanString(last).toString()
+                getString(R.string.sync_last, time, manager.statusText ?: "")
+            }
         }
     }
 
@@ -309,5 +313,6 @@ class SettingsFragment : PreferenceFragmentCompat(), OnSharedPreferenceChangeLis
         private const val RINGTONE_REQUEST_CODE = 1
         private const val PUBLIC_BACKUP_REQUEST_CODE = 2
         private const val SYNC_FOLDER_REQUEST_CODE = 3
+        private val SYNC_STATUS_KEYS = setOf(SyncManager.PREF_RUNNING, SyncManager.PREF_STATUS, SyncManager.PREF_LAST_TIME)
     }
 }
