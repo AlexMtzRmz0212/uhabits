@@ -2,6 +2,7 @@ package org.isoron.uhabits.sync
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import org.isoron.uhabits.core.sync.SyncFolder
@@ -29,8 +30,24 @@ class DocumentFileSyncFolder(private val context: Context, treeUri: Uri) : SyncF
             ?: throw IOException("Cannot create $SUBFOLDER in the sync folder")
     }
 
-    override fun listFiles(): List<String> =
-        dir.listFiles().filter { it.isFile }.mapNotNull { it.name }
+    override fun listFiles(): List<String> {
+        refreshListing()
+        return dir.listFiles().filter { it.isFile }.mapNotNull { it.name }
+    }
+
+    /** Asks the storage provider (Google Drive) to re-fetch the folder instead of serving a cached listing. */
+    private fun refreshListing() {
+        try {
+            if (dir.uri.scheme != "content") return
+            val children = DocumentsContract.buildChildDocumentsUriUsingTree(
+                dir.uri,
+                DocumentsContract.getDocumentId(dir.uri)
+            )
+            context.contentResolver.refresh(children, null, null)
+        } catch (e: Exception) {
+            Log.w(TAG, "Cannot refresh the listing", e)
+        }
+    }
 
     override fun read(name: String): String? {
         val file = dir.findFile(name) ?: return null

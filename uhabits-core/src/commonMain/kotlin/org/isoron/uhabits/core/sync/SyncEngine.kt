@@ -52,7 +52,9 @@ class SyncEngine(
         val peerInfo = mutableListOf<String>()
         val errors = mutableListOf<String>()
 
-        for (name in folder.listFiles().filter { it.endsWith(FILE_SUFFIX) && it != ownFileName }) {
+        val listing = folder.listFiles()
+        peerInfo.add("folder lists ${listing.size}: " + listing.joinToString(",") { it.take(6) })
+        for (name in listing.filter { it.endsWith(FILE_SUFFIX) && it != ownFileName }) {
             seen++
             val text = folder.read(name)
             peerInfo.add("${name.take(6)}: ${folder.describe(name) ?: "?"}, read ${text?.length ?: 0} chars")
