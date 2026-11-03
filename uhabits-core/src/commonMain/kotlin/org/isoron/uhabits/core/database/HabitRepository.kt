@@ -5,6 +5,7 @@ import org.isoron.platform.io.PreparedStatement
 import org.isoron.platform.io.StepResult
 import org.isoron.platform.io.queryLong
 import org.isoron.platform.io.run
+import org.isoron.uhabits.core.sync.SyncRepository
 
 data class HabitData(
     var id: Long? = null,
@@ -28,7 +29,7 @@ data class HabitData(
     var category: String = ""
 )
 
-class HabitRepository(private val db: Database) {
+class HabitRepository(private val db: Database, private val sync: SyncRepository? = null) {
     private val findAllStmt by lazy {
         db.prepareStatement(
             """SELECT id, name, description, question, freq_num, freq_den, color,
@@ -84,12 +85,15 @@ class HabitRepository(private val db: Database) {
             insertWithIdStmt.bindLong(1, data.id!!)
             bindForInsert(insertWithIdStmt, data, offset = 1)
             insertWithIdStmt.step()
+            sync?.touchHabit(data.id!!)
             return data.id!!
         }
         insertStmt.reset()
         bindForInsert(insertStmt, data)
         insertStmt.step()
-        return db.queryLong("SELECT last_insert_rowid()")
+        val id = db.queryLong("SELECT last_insert_rowid()")
+        sync?.touchHabit(id)
+        return id
     }
 
     fun update(data: HabitData) {
@@ -97,12 +101,19 @@ class HabitRepository(private val db: Database) {
         bindForInsert(updateStmt, data)
         updateStmt.bindLong(19, data.id!!)
         updateStmt.step()
+        sync?.touchHabit(data.id!!)
     }
 
     fun delete(id: Long) {
+        sync?.deleteHabit(sync.habitUuid(id))
         deleteStmt.reset()
         deleteStmt.bindLong(1, id)
         deleteStmt.step()
+    }
+
+    /** Stamps the habits in positions [from]..[to] as changed, after raw SQL shifted their positions. */
+    fun touchPositions(from: Int, to: Int) {
+        sync?.touchHabitsInPositions(from, to)
     }
 
     fun execSQL(sql: String) = db.run(sql)

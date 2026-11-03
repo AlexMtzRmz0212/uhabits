@@ -171,6 +171,7 @@ class SQLiteHabitList(private val modelFactory: ModelFactory) : HabitList() {
                     "where position > $fromPos and position <= $toPos"
             )
         }
+        repository.touchPositions(minOf(fromPos, toPos), maxOf(fromPos, toPos))
         val data = copyFrom(from)
         data.position = toPos
         repository.update(data)
@@ -207,6 +208,7 @@ class SQLiteHabitList(private val modelFactory: ModelFactory) : HabitList() {
                     "where position > $fromPos and position <= $toPos"
             )
         }
+        repository.touchPositions(minOf(fromPos, toPos), maxOf(fromPos, toPos))
         val data = copyFrom(habit)
         data.position = toPos
         repository.update(data)
@@ -245,6 +247,14 @@ class SQLiteHabitList(private val modelFactory: ModelFactory) : HabitList() {
     @Synchronized
     fun reload() {
         loaded = false
+    }
+
+    /** Re-reads every habit from the database and recomputes scores, after sync changed rows. */
+    @Synchronized
+    fun reloadAndRecompute() {
+        loaded = false
+        loadRecords()
+        for (habit in list) habit.recompute()
     }
 
     companion object {

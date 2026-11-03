@@ -41,6 +41,7 @@ import org.isoron.uhabits.core.tasks.TaskRunner
 import org.isoron.uhabits.core.ui.ThemeSwitcher.Companion.THEME_DARK
 import org.isoron.uhabits.core.utils.MidnightTimer
 import org.isoron.uhabits.database.AutoBackup
+import org.isoron.uhabits.sync.SyncManager
 import org.isoron.uhabits.inject.HabitsActivityComponent
 import org.isoron.uhabits.inject.HabitsApplicationComponent
 import org.isoron.uhabits.inject.create
@@ -105,6 +106,7 @@ class ListHabitsActivity : AppCompatActivity(), Preferences.Listener {
         midnightTimer.onPause()
         screen.onDetached()
         dismissCurrentDialog()
+        SyncManager.requestSync(this)
         super.onPause()
     }
 
@@ -141,6 +143,8 @@ class ListHabitsActivity : AppCompatActivity(), Preferences.Listener {
                 Log.e("ListHabitActivity", "TaskRunner failed", e)
             }
         }
+        SyncManager.updateSchedule(this)
+        SyncManager.requestSync(this)
         if (prefs.theme == THEME_DARK && prefs.isPureBlackEnabled != pureBlack) {
             restartWithFade(ListHabitsActivity::class.java)
         }

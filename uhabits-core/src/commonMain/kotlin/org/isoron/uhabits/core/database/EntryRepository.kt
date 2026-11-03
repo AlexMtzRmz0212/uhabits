@@ -4,6 +4,7 @@ import org.isoron.platform.io.Database
 import org.isoron.platform.io.StepResult
 import org.isoron.platform.io.queryLong
 import org.isoron.platform.io.run
+import org.isoron.uhabits.core.sync.SyncRepository
 
 data class EntryData(
     var id: Long? = null,
@@ -13,7 +14,7 @@ data class EntryData(
     var notes: String = ""
 )
 
-class EntryRepository(private val db: Database) {
+class EntryRepository(private val db: Database, private val sync: SyncRepository? = null) {
     private val findAllByHabitStmt by lazy {
         db.prepareStatement(
             "SELECT id, habit, timestamp, value, notes FROM Repetitions WHERE habit = ? ORDER BY timestamp DESC"
@@ -59,10 +60,13 @@ class EntryRepository(private val db: Database) {
         insertStmt.bindInt(3, data.value)
         insertStmt.bindText(4, data.notes)
         insertStmt.step()
-        return db.queryLong("SELECT last_insert_rowid()")
+        val id = db.queryLong("SELECT last_insert_rowid()")
+        sync?.touchEntry(data.habitId!!, data.timestamp)
+        return id
     }
 
     fun deleteByHabitIdAndTimestamp(habitId: Long, timestamp: Long) {
+        sync?.deleteEntry(habitId, timestamp)
         deleteByHabitAndTimestampStmt.reset()
         deleteByHabitAndTimestampStmt.bindLong(1, habitId)
         deleteByHabitAndTimestampStmt.bindLong(2, timestamp)
@@ -70,6 +74,7 @@ class EntryRepository(private val db: Database) {
     }
 
     fun deleteByHabitId(habitId: Long) {
+        sync?.deleteAllEntries(habitId)
         deleteByHabitStmt.reset()
         deleteByHabitStmt.bindLong(1, habitId)
         deleteByHabitStmt.step()

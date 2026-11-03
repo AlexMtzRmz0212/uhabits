@@ -141,6 +141,11 @@
         </receiver>
 
         <service
+            android:name=".sync.SyncJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <service
             android:name=".widgets.StackWidgetService"
             android:exported="false"
             android:permission="android.permission.BIND_REMOTEVIEWS" />

@@ -27,6 +27,8 @@ import org.isoron.platform.io.migrateTo
 import org.isoron.platform.io.setVersion
 import org.isoron.uhabits.core.database.UnsupportedDatabaseVersionException
 import org.isoron.uhabits.database.AndroidDatabase
+import org.isoron.uhabits.sync.SafetyBackup
+import java.io.File
 
 class HabitsDatabaseOpener(
     private val context: Context,
@@ -52,6 +54,10 @@ class HabitsDatabaseOpener(
     ) {
         db.disableWriteAheadLogging()
         if (db.version < 8) throw UnsupportedDatabaseVersionException()
+        // Version 27 adds the sync tables and cannot be undone, so keep a copy of the old file.
+        if (oldVersion >= 8 && db.version < 27) {
+            SafetyBackup.create(context, File(db.path), "Before upgrade from v${db.version}")
+        }
         val wrappedDb = AndroidDatabase(db)
         wrappedDb.setVersion(db.version)
         runBlocking {

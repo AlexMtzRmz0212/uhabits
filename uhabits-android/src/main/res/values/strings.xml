@@ -140,6 +140,10 @@
     <string name="export_full_backup_summary">Generates a file that contains all your data. This file can be imported back.</string>
     <string name="select_public_backup_folder">Select public backup folder</string>
     <string name="no_public_backup_folder_selected">No folder selected</string>
+    <string name="sync_folder">Sync folder</string>
+    <string name="no_sync_folder_selected">Not syncing. Pick a folder shared with your other devices.</string>
+    <string name="sync_now">Sync now</string>
+    <string name="sync_never">Not synced yet</string>
     <string name="bug_report_failed">Failed to generate bug report.</string>
     <string name="generate_bug_report">Generate bug report</string>
     <string name="troubleshooting">Troubleshooting</string>

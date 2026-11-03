@@ -52,6 +52,7 @@ import org.isoron.uhabits.notifications.RingtoneManager
 import org.isoron.uhabits.utils.StyledResources
 import org.isoron.uhabits.utils.applyBottomInset
 import org.isoron.uhabits.utils.startActivitySafely
+import org.isoron.uhabits.sync.SyncManager
 import org.isoron.uhabits.widgets.WidgetUpdater
 import java.util.Locale
 
@@ -67,6 +68,17 @@ class SettingsFragment : PreferenceFragmentCompat(), OnSharedPreferenceChangeLis
             RINGTONE_REQUEST_CODE -> {
                 ringtoneManager!!.update(data)
                 updateRingtoneDescription()
+                return
+            }
+            SYNC_FOLDER_REQUEST_CODE -> {
+                val uri = data?.data ?: return
+                val flags =
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                requireContext().contentResolver.takePersistableUriPermission(uri, flags)
+                sharedPrefs?.edit()?.putString(SyncManager.PREF_FOLDER, uri.toString())?.apply()
+                SyncManager.updateSchedule(requireContext())
+                SyncManager.requestSync(requireContext(), minGapMillis = 0)
+                updateSyncSummaries()
                 return
             }
             PUBLIC_BACKUP_REQUEST_CODE -> {
@@ -141,6 +153,21 @@ class SettingsFragment : PreferenceFragmentCompat(), OnSharedPreferenceChangeLis
                 activity?.startActivitySafely(intent)
                 return true
             }
+            "syncFolder" -> {
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                intent.addFlags(
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                )
+                startActivityForResult(intent, SYNC_FOLDER_REQUEST_CODE)
+                return true
+            }
+            "syncNow" -> {
+                SyncManager.requestSync(requireContext(), minGapMillis = 0)
+                findPreference("syncNow").summary = getString(R.string.sync_now) + "…"
+                return true
+            }
             "publicBackupFolder" -> {
                 val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
                 intent.addFlags(
@@ -166,6 +193,7 @@ class SettingsFragment : PreferenceFragmentCompat(), OnSharedPreferenceChangeLis
         }
         updateWeekdayPreference()
         updatePublicBackupFolderSummary()
+        updateSyncSummaries()
 
         findPreference("reminderSound").isVisible = false
     }
@@ -230,6 +258,22 @@ class SettingsFragment : PreferenceFragmentCompat(), OnSharedPreferenceChangeLis
         ringtonePreference.summary = ringtoneName
     }
 
+    private fun updateSyncSummaries() {
+        val manager = SyncManager(requireContext())
+        val folderPref = findPreference("syncFolder")
+        val nowPref = findPreference("syncNow")
+        val uri = manager.folderUri
+        folderPref.summary = if (uri == null) getString(R.string.no_sync_folder_selected) else (fullPathFor(uri) ?: uri.toString())
+        nowPref.isEnabled = uri != null
+        val last = sharedPrefs?.getLong(SyncManager.PREF_LAST_TIME, 0L) ?: 0L
+        nowPref.summary = if (last == 0L) {
+            getString(R.string.sync_never)
+        } else {
+            val time = android.text.format.DateUtils.getRelativeTimeSpanString(last).toString()
+            "$time · ${manager.statusText ?: ""}"
+        }
+    }
+
     private fun updatePublicBackupFolderSummary() {
         val pref = findPreference("publicBackupFolder")
         val uriString = sharedPrefs?.getString("publicBackupFolder", null)
@@ -264,5 +308,6 @@ class SettingsFragment : PreferenceFragmentCompat(), OnSharedPreferenceChangeLis
     companion object {
         private const val RINGTONE_REQUEST_CODE = 1
         private const val PUBLIC_BACKUP_REQUEST_CODE = 2
+        private const val SYNC_FOLDER_REQUEST_CODE = 3
     }
 }

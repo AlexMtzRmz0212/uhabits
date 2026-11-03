@@ -19,12 +19,14 @@
 package org.isoron.uhabits.core.models.sqlite
 
 import me.tatarka.inject.annotations.Inject
+import org.isoron.platform.io.getVersion
 import org.isoron.uhabits.core.database.EntryRepository
 import org.isoron.uhabits.core.database.HabitRepository
 import org.isoron.uhabits.core.models.EntryList
 import org.isoron.uhabits.core.models.ModelFactory
 import org.isoron.uhabits.core.models.ScoreList
 import org.isoron.uhabits.core.models.StreakList
+import org.isoron.uhabits.core.sync.SyncRepository
 
 /**
  * Factory that provides models backed by an SQLite database.
@@ -33,8 +35,10 @@ import org.isoron.uhabits.core.models.StreakList
 class SQLModelFactory(
     val database: org.isoron.platform.io.Database
 ) : ModelFactory {
-    val habitRepository = HabitRepository(database)
-    val entryRepository = EntryRepository(database)
+    // The sync tables only exist from database version 27 on.
+    val syncRepository = if (database.getVersion() >= 27) SyncRepository(database) else null
+    val habitRepository = HabitRepository(database, syncRepository)
+    val entryRepository = EntryRepository(database, syncRepository)
 
     override fun buildOriginalEntries() = SQLiteEntryList(entryRepository)
     override fun buildComputedEntries() = EntryList()
