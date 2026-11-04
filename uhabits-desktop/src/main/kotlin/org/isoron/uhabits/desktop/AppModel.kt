@@ -131,6 +131,25 @@ class AppModel(val dbPath: Path) {
 
     var error by mutableStateOf<String?>(null)
 
+    /** A newer installer found on GitHub, or null. Never set when running from source. */
+    var update by mutableStateOf<UpdateInfo?>(null)
+        private set
+
+    /** What the update banner says while downloading, or after a failure; null for the default text. */
+    var updateStatus by mutableStateOf<String?>(null)
+        private set
+
+    var updateBusy by mutableStateOf(false)
+        private set
+
+    var updateDismissed by mutableStateOf(false)
+
+    /** Set when the installer has been started: the window must close so it can replace the app. */
+    var exitRequested by mutableStateOf(false)
+        private set
+
+    private val updates = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "updater").apply { isDaemon = true } }
+
     /** The habit whose detail screen is open, or null for the list. */
     var openHabitId by mutableStateOf<Long?>(null)
 
@@ -141,6 +160,42 @@ class AppModel(val dbPath: Path) {
         }
         scheduler.scheduleAtFixedRate({ refreshToday() }, 1, 1, TimeUnit.MINUTES)
         folder?.let { startSync(it) }
+        if (Updater.currentBuild() != null) {
+            updates.scheduleWithFixedDelay({ checkForUpdate() }, 10, 6 * 3600L, TimeUnit.SECONDS)
+        }
+    }
+
+    /** Looks for a newer installer. Being offline or rate-limited is not an error: it tries again later. */
+    private fun checkForUpdate() {
+        val current = Updater.currentBuild() ?: return
+        try {
+            val found = Updater.findUpdate(Updater.fetchReleases(), current)
+            if (found != null && found != update) {
+                update = found
+                updateDismissed = false
+            }
+        } catch (e: Exception) {
+            // Try again at the next check.
+        }
+    }
+
+    /** Downloads the update, starts its installer, and asks the window to close. */
+    fun installUpdate() {
+        val info = update ?: return
+        if (updateBusy) return
+        updateBusy = true
+        updateStatus = "Downloading build ${info.build}…"
+        updates.execute {
+            try {
+                val msi = Updater.download(info)
+                updateStatus = "Installing… the app will reopen by itself."
+                Updater.installAfterExit(msi)
+                exitRequested = true
+            } catch (e: Exception) {
+                updateStatus = "Update failed: ${e.message ?: e.javaClass.simpleName}"
+                updateBusy = false
+            }
+        }
     }
 
     /** The day changes at 03:00, like the phone's default "midnight delay", not at midnight. */
@@ -474,6 +529,7 @@ class AppModel(val dbPath: Path) {
     fun close() {
         stopSync()
         scheduler.shutdown()
+        updates.shutdown()
         synchronized(lock) { db.close() }
     }
 

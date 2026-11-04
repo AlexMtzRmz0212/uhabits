@@ -37,8 +37,10 @@ class SyncManager(context: Context) {
     val statusText: String?
         get() = prefs.getString(PREF_STATUS, null)
 
-    fun syncNow() = synchronized(lock) {
-        val uri = folderUri ?: return@synchronized
+    /** Runs one round and returns a short sentence about it, for a toast. */
+    fun syncNow(): String = synchronized(lock) {
+        val uri = folderUri ?: return@synchronized "No sync folder"
+        var summary = ""
         lastStart.set(System.currentTimeMillis())
         prefs.edit().putBoolean(PREF_RUNNING, true).apply()
         try {
@@ -59,13 +61,20 @@ class SyncManager(context: Context) {
             saveStatus(
                 describe(report)
             )
+            summary = when {
+                report.changed -> "Synced: got ${report.applied} changes"
+                report.peersSeen == 0 -> "Up to date, but no other device's file found yet"
+                else -> "Already up to date"
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Sync failed", e)
+            summary = "Sync failed: ${e.message ?: e.javaClass.simpleName}"
             saveStatus("Failed: ${e.message ?: e.javaClass.simpleName}")
         } finally {
             // An Error (such as out of memory) skips the handlers above; never leave "Syncing…" stuck.
             prefs.edit().putBoolean(PREF_RUNNING, false).apply()
         }
+        summary
     }
 
     /** What happened, in words the settings screen can show: it must say if the other device's file was not found. */
@@ -122,6 +131,19 @@ class SyncManager(context: Context) {
             if (!manager.isEnabled) return
             if (System.currentTimeMillis() - lastStart.get() < minGapMillis) return
             executor.execute { manager.syncNow() }
+        }
+
+        /** Runs a round right now in the background and calls [onDone] on the main thread with a short summary. */
+        fun syncWithResult(context: Context, onDone: (String) -> Unit) {
+            val manager = SyncManager(context)
+            executor.execute {
+                val summary = try {
+                    manager.syncNow()
+                } catch (e: Throwable) {
+                    "Sync failed: ${e.message ?: e.javaClass.simpleName}"
+                }
+                Handler(Looper.getMainLooper()).post { onDone(summary) }
+            }
         }
 
         /** Keeps the periodic background job in line with whether a folder is selected. */

@@ -1,5 +1,6 @@
 package org.isoron.uhabits.desktop
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -139,6 +140,7 @@ private fun listHabits(dbPath: Path) {
 }
 
 private fun showStatus(dbPath: Path, folder: Path?) {
+    println("App version: ${System.getProperty("jpackage.app-version") ?: "(running from source)"}")
     println("Database:    $dbPath")
     if (!Files.exists(dbPath)) {
         println("             (not created yet)")
@@ -162,6 +164,13 @@ private fun openWindow(dbPath: Path) {
         exitProcess(1)
     }
     application {
+        // After an update is downloaded and its installer started, close so the installer can replace the app.
+        LaunchedEffect(model.exitRequested) {
+            if (model.exitRequested) {
+                model.close()
+                exitApplication()
+            }
+        }
         Window(
             onCloseRequest = {
                 model.close()

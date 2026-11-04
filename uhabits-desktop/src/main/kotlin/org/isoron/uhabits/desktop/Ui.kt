@@ -136,6 +136,7 @@ private fun MainScreen(model: AppModel) {
     Column(modifier = Modifier.fillMaxSize()) {
         TopBar(model, onNew = { creating = true })
         HorizontalDivider()
+        UpdateBanner(model)
         if (rows.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
@@ -189,6 +190,31 @@ private fun MainScreen(model: AppModel) {
             confirmButton = { TextButton(onClick = { model.error = null }) { Text("OK") } },
             text = { Text(message) }
         )
+    }
+}
+
+/** Shown when a newer version of the app is on GitHub. */
+@Composable
+private fun UpdateBanner(model: AppModel) {
+    val info = model.update ?: return
+    if (model.updateDismissed && !model.updateBusy) return
+    Row(
+        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            model.updateStatus ?: "A new version of My Habits is available (build ${info.build}).",
+            color = Color.White,
+            modifier = Modifier.weight(1f)
+        )
+        if (!model.updateBusy) {
+            Button(
+                onClick = { model.installUpdate() },
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF00695C))
+            ) { Text("Install and restart") }
+            TextButton(onClick = { model.updateDismissed = true }) { Text("Later", color = Color.White) }
+        }
     }
 }
 

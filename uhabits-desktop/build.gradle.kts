@@ -2,15 +2,35 @@ plugins {
     kotlin("jvm")
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose.multiplatform)
-    application
 }
 
 kotlin {
     jvmToolchain(17)
 }
 
-application {
-    mainClass.set("org.isoron.uhabits.desktop.MainKt")
+// Windows version numbers are x.y.z with a z up to 65535; CI passes its run number.
+val appVersion = "1.0.${(findProperty("buildNumber") as String?)?.toIntOrNull() ?: 0}"
+
+compose.desktop {
+    application {
+        mainClass = "org.isoron.uhabits.desktop.MainKt"
+        nativeDistributions {
+            targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi)
+            packageName = "My Habits"
+            packageVersion = appVersion
+            description = "My Habits desktop app (syncs with the phone app)"
+            vendor = "My Habits"
+            // Runtime modules the app needs; the check in the packaging notes lists how to re-verify.
+            modules("java.sql", "java.naming", "jdk.unsupported")
+            windows {
+                menuGroup = "My Habits"
+                shortcut = true
+                perUserInstall = true // no administrator rights needed
+                // Never change: it is how a new MSI knows to upgrade the old install in place.
+                upgradeUuid = "6f0b2d1e-4c1a-4b7e-9a63-2d5c8f7a1e90"
+            }
+        }
+    }
 }
 
 // The database migrations live in the core module. Bundle them so the app finds them on the
@@ -22,6 +42,14 @@ sourceSets {
             exclude("fonts/**")
         }
     }
+}
+
+// A zip of the app image: unzip anywhere and run "My Habits.exe". Needs no installer tools.
+tasks.register<Zip>("packagePortableZip") {
+    dependsOn("createDistributable")
+    from(layout.buildDirectory.dir("compose/binaries/main/app"))
+    archiveFileName.set("my-habits-desktop-portable.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("portable"))
 }
 
 dependencies {

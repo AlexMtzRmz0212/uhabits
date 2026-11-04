@@ -31,6 +31,13 @@
 
     <group android:id="@+id/actionItems">
         <item
+            android:id="@+id/actionSync"
+            android:enabled="true"
+            android:icon="@drawable/ic_action_sync_dark"
+            android:title="@string/sync_now"
+            app:showAsAction="always"/>
+
+        <item
             android:id="@+id/actionCreateHabit"
             android:enabled="true"
             android:icon="?iconAdd"

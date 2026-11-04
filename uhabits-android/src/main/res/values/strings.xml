@@ -145,6 +145,7 @@
     <string name="sync_now">Sync now</string>
     <string name="sync_never">Not synced yet</string>
     <string name="sync_running">Syncing…</string>
+    <string name="sync_not_set_up">Pick a sync folder first</string>
     <string name="sync_last">Last synced %1$s · %2$s</string>
     <string name="bug_report_failed">Failed to generate bug report.</string>
     <string name="generate_bug_report">Generate bug report</string>

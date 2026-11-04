@@ -43,3 +43,45 @@ jobs:
           name: My Habits build ${{ github.run_number }}
           target_commitish: ${{ github.sha }}
           files: my-habits-${{ github.run_number }}.apk
+
+  # Windows installer for the desktop app, attached to the same release as the APK.
+  desktop:
+    needs: release
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # jpackage needs the WiX 3 tools on PATH to build an .msi.
+      - name: Make sure WiX 3 is available
+        shell: pwsh
+        run: |
+          if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
+            choco install wixtoolset -y --no-progress
+          }
+          $wix = Get-ChildItem "C:\Program Files (x86)" -Filter "WiX Toolset*" -Directory | Select-Object -First 1
+          "$($wix.FullName)\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Build installer and portable zip
+        shell: pwsh
+        run: ./gradlew.bat :uhabits-desktop:packageMsi :uhabits-desktop:packagePortableZip "-PbuildNumber=${{ github.run_number }}" --console=plain
+
+      - name: Rename files
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem uhabits-desktop/build/compose/binaries/main/msi -Filter *.msi | Select-Object -First 1
+          Copy-Item $msi.FullName "my-habits-desktop-${{ github.run_number }}.msi"
+          Copy-Item uhabits-desktop/build/portable/my-habits-desktop-portable.zip "my-habits-desktop-${{ github.run_number }}-portable.zip"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mine-${{ github.run_number }}
+          files: |
+            my-habits-desktop-${{ github.run_number }}.msi
+            my-habits-desktop-${{ github.run_number }}-portable.zip

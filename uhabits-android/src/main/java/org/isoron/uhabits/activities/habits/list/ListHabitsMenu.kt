@@ -20,9 +20,15 @@
 package org.isoron.uhabits.activities.habits.list
 
 import android.content.Context
+import android.view.Gravity
 import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
 import me.tatarka.inject.annotations.Inject
@@ -33,6 +39,7 @@ import org.isoron.uhabits.core.ui.ThemeSwitcher
 import org.isoron.uhabits.core.ui.screens.habits.list.ListHabitsMenuBehavior
 import org.isoron.uhabits.inject.ActivityContext
 import org.isoron.uhabits.inject.ActivityScope
+import org.isoron.uhabits.sync.SyncManager
 import org.isoron.uhabits.utils.StyledResources
 
 @Inject
@@ -53,6 +60,45 @@ class ListHabitsMenu(
         createSearchBar(menu)
         createMenuItems(menu)
         updateArrows(menu)
+    }
+
+    /**
+     * Runs a sync round and blocks the whole screen, with a spinner, until it finishes. The other
+     * device's changes are on the list when the spinner goes away.
+     */
+    private fun syncAndWait() {
+        if (!SyncManager(activity).isEnabled) {
+            Toast.makeText(activity, R.string.sync_not_set_up, Toast.LENGTH_LONG).show()
+            behavior.onViewSettings()
+            return
+        }
+        val padding = (24 * activity.resources.displayMetrics.density).toInt()
+        val content = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(padding, padding, padding, padding)
+            addView(ProgressBar(activity).apply { isIndeterminate = true })
+            addView(
+                TextView(activity).apply {
+                    setText(R.string.sync_running)
+                    textSize = 16f
+                    setPadding(padding, 0, 0, 0)
+                }
+            )
+        }
+        val dialog = AlertDialog.Builder(activity)
+            .setView(content)
+            .setCancelable(false)
+            .create()
+        dialog.show()
+        SyncManager.syncWithResult(activity) { summary ->
+            try {
+                if (dialog.isShowing) dialog.dismiss()
+            } catch (e: IllegalArgumentException) {
+                // The screen was closed or rotated while syncing; nothing left to dismiss.
+            }
+            Toast.makeText(activity.applicationContext, summary, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun createMenuItems(menu: Menu) {
@@ -121,6 +167,11 @@ class ListHabitsMenu(
 
             R.id.actionCreateHabit -> {
                 behavior.onCreateHabit()
+                return true
+            }
+
+            R.id.actionSync -> {
+                syncAndWait()
                 return true
             }
 
