@@ -26,6 +26,11 @@ class Settings(dbPath: Path) {
         store(load().apply { setProperty("syncFolder", folder.toAbsolutePath().toString()) })
     }
 
+    /** Interface zoom (1.0 = normal), changed with Ctrl+scroll or Ctrl +/-. */
+    var zoom: Float
+        get() = load().getProperty("zoom")?.toFloatOrNull()?.coerceIn(0.6f, 2.5f) ?: 1f
+        set(value) = store(load().apply { setProperty("zoom", value.toString()) })
+
     /** True once the user chose to use the app without a sync folder. */
     var skippedSync: Boolean
         get() = load().getProperty("skippedSync") == "true"

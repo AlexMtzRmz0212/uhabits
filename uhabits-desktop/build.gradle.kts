@@ -25,6 +25,7 @@ compose.desktop {
             windows {
                 menuGroup = "My Habits"
                 shortcut = true
+                iconFile.set(project.file("packaging/icon.ico"))
                 perUserInstall = true // no administrator rights needed
                 // Never change: it is how a new MSI knows to upgrade the old install in place.
                 upgradeUuid = "6f0b2d1e-4c1a-4b7e-9a63-2d5c8f7a1e90"

@@ -111,6 +111,7 @@ class AppModel(val dbPath: Path) {
     private val habitList = factory.buildHabitList() as SQLiteHabitList
     private val settings = Settings(dbPath)
     private val scheduler = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "sync-scheduler").apply { isDaemon = true } }
+    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "edits").apply { isDaemon = true } }
     private var desktop: DesktopSync? = null
     private var watcher: FolderWatcher? = null
     private var pendingSync: ScheduledFuture<*>? = null
@@ -121,6 +122,24 @@ class AppModel(val dbPath: Path) {
 
     /** Text typed in the search box of the main list. */
     var searchQuery by mutableStateOf("")
+
+    /** Interface zoom, 1.0 = normal. Saved so it survives restarts. */
+    var zoom by mutableStateOf(settings.zoom)
+        private set
+
+    fun zoomBy(delta: Float) = applyZoom(zoom + delta)
+
+    fun resetZoom() = applyZoom(1f)
+
+    private fun applyZoom(value: Float) {
+        val next = (Math.round(value.coerceIn(0.6f, 2.5f) * 20) / 20f)
+        if (next == zoom) return
+        zoom = next
+        try {
+            settings.zoom = next
+        } catch (_: Exception) {
+        }
+    }
 
     /** List filters, like the phone's "Show archived" and "Show completed" menu items. */
     var showArchived by mutableStateOf(false)
@@ -246,7 +265,20 @@ class AppModel(val dbPath: Path) {
      * Archived habits are hidden unless [showArchived]; habits that already have an entry today
      * (a check, a number or a skip) are hidden when [showEntered] is false.
      */
-    fun rows(days: Int, query: String = "", showArchived: Boolean = false, showEntered: Boolean = true): List<HabitRow> = synchronized(lock) {
+    fun rows(days: Int, query: String = "", showArchived: Boolean = false, showEntered: Boolean = true): List<HabitRow> {
+        awaitEdits() // an edit made just before is always visible in the result
+        return rowsNow(days, query, showArchived, showEntered)
+    }
+
+    /** Waits for edits queued on the background thread. Never call while holding [lock]. */
+    private fun awaitEdits() {
+        try {
+            worker.submit {}.get(5, TimeUnit.SECONDS)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun rowsNow(days: Int, query: String, showArchived: Boolean, showEntered: Boolean): List<HabitRow> = synchronized(lock) {
         val today = getToday()
         val theme = LightTheme()
         val matcher = HabitMatcher(isArchivedAllowed = showArchived, isEnteredAllowed = showEntered, searchQuery = query)
@@ -310,6 +342,12 @@ class AppModel(val dbPath: Path) {
         CreateRepetitionCommand(habitList, habit, date, next, current.notes).run()
     }
 
+    /** Sets a yes/no cell directly to one of the [Entry] states (YES_MANUAL, NO, SKIP, UNKNOWN). */
+    fun setState(habitId: Long, date: LocalDate, state: Int) = edit(habitId) { habit ->
+        val current = habit.computedEntries.get(date)
+        CreateRepetitionCommand(habitList, habit, date, state, current.notes).run()
+    }
+
     fun setNumber(habitId: Long, date: LocalDate, value: Double?) = edit(habitId) { habit ->
         val notes = habit.computedEntries.get(date).notes
         val stored = if (value == null) Entry.UNKNOWN else (value * 1000).roundToInt()
@@ -322,16 +360,26 @@ class AppModel(val dbPath: Path) {
         CreateRepetitionCommand(habitList, habit, date, stored, notes).run()
     }
 
+    /**
+     * Runs on a background thread, in order, so a click never freezes the window while a sync
+     * round holds the lock or the habit's scores are recomputed.
+     */
     private fun edit(habitId: Long, block: (Habit) -> Unit) {
         try {
-            synchronized(lock) {
-                val habit = habitList.getById(habitId) ?: return
-                block(habit)
+            worker.execute {
+                try {
+                    synchronized(lock) {
+                        val habit = habitList.getById(habitId) ?: return@execute
+                        block(habit)
+                    }
+                    revision++
+                    syncSoon()
+                } catch (e: Exception) {
+                    error = "Could not save: ${e.message}"
+                }
             }
-            revision++
-            syncSoon()
-        } catch (e: Exception) {
-            error = "Could not save: ${e.message}"
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            // The window is closing.
         }
     }
 
@@ -564,6 +612,8 @@ class AppModel(val dbPath: Path) {
 
     /** Stops syncing (with a last round) and closes the database. */
     fun close() {
+        worker.shutdown()
+        worker.awaitTermination(3, TimeUnit.SECONDS)
         stopSync()
         scheduler.shutdown()
         updates.shutdown()

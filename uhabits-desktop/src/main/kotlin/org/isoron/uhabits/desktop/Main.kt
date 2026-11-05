@@ -1,6 +1,26 @@
 package org.isoron.uhabits.desktop
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.loadImageBitmap
+import androidx.compose.ui.res.useResource
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -156,6 +176,9 @@ private fun showStatus(dbPath: Path, folder: Path?) {
     println("Sync folder: ${folder ?: "(none, run: myhabits init <folder>)"}")
 }
 
+private const val ZOOM_STEP = 0.1f
+
+@OptIn(ExperimentalComposeUiApi::class)
 private fun openWindow(dbPath: Path) {
     val model = try {
         AppModel(dbPath)
@@ -177,9 +200,38 @@ private fun openWindow(dbPath: Path) {
                 exitApplication()
             },
             title = "My Habits",
-            state = rememberWindowState(width = 1000.dp, height = 700.dp)
+            icon = remember { BitmapPainter(useResource("icon.png", ::loadImageBitmap)) },
+            state = rememberWindowState(width = 1000.dp, height = 700.dp),
+            // Ctrl + / Ctrl - / Ctrl 0, like a browser.
+            onPreviewKeyEvent = { event ->
+                if (event.type == KeyEventType.KeyDown && event.isCtrlPressed) {
+                    when (event.key) {
+                        Key.Equals, Key.Plus, Key.NumPadAdd -> { model.zoomBy(ZOOM_STEP); true }
+                        Key.Minus, Key.NumPadSubtract -> { model.zoomBy(-ZOOM_STEP); true }
+                        Key.Zero, Key.NumPad0 -> { model.resetZoom(); true }
+                        else -> false
+                    }
+                } else {
+                    false
+                }
+            }
         ) {
-            App(model)
+            // Scaling the density scales every dp and sp, so the whole window zooms together.
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density * model.zoom, base.fontScale)) {
+                Box(
+                    modifier = Modifier.fillMaxSize().onPointerEvent(PointerEventType.Scroll, PointerEventPass.Initial) { event ->
+                        if (event.keyboardModifiers.isCtrlPressed) {
+                            val change = event.changes.first()
+                            // Wheel up zooms in, wheel down zooms out.
+                            if (change.scrollDelta.y != 0f) model.zoomBy(if (change.scrollDelta.y < 0) ZOOM_STEP else -ZOOM_STEP)
+                            event.changes.forEach { it.consume() }
+                        }
+                    }
+                ) {
+                    App(model)
+                }
+            }
         }
     }
 }

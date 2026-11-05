@@ -1,9 +1,29 @@
 package org.isoron.uhabits.desktop
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -37,18 +57,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.isoron.platform.time.LocalDate
+import org.isoron.uhabits.core.models.Entry
 import org.isoron.uhabits.core.models.HabitType
 import java.nio.file.Paths
 import javax.swing.JFileChooser
 
-private const val DAYS = 7
+private const val MIN_DAYS = 3
+private const val MAX_DAYS = 14 // set both to 7 for the old fixed week
+private val DAY_WIDTH = 72.dp
+private val NAME_COLUMN_MIN = 280.dp
 
 private val appColors = lightColorScheme(
     primary = Color(0xFF00897B),
@@ -178,12 +204,27 @@ private sealed interface EditTarget {
 
 @Composable
 private fun MainScreen(model: AppModel) {
+    // The number of day columns follows the window width, like the phone does.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val days = ((maxWidth - NAME_COLUMN_MIN) / DAY_WIDTH).toInt().coerceIn(MIN_DAYS, MAX_DAYS)
+        MainScreenContent(model, days)
+    }
+}
+
+@Composable
+private fun MainScreenContent(model: AppModel, days: Int) {
     // Reading revision makes the list rebuild after every edit or sync that changed something.
     val revision = model.revision
     val query = model.searchQuery
     val showArchived = model.showArchived
     val showEntered = model.showEntered
-    val rows = remember(revision, query, showArchived, showEntered) { model.rows(DAYS, query, showArchived, showEntered) }
+    // Built off the UI thread; the previous list stays on screen until the new one is ready,
+    // so typing in search, toggling a filter or resizing never freezes the window.
+    var loaded by remember { mutableStateOf<List<HabitRow>?>(null) }
+    LaunchedEffect(revision, query, showArchived, showEntered, days) {
+        loaded = withContext(Dispatchers.Default) { model.rows(days, query, showArchived, showEntered) }
+    }
+    val rows = loaded ?: emptyList()
     val items = remember(rows) { buildListItems(rows) }
     var editing by remember { mutableStateOf<EditTarget?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -192,7 +233,9 @@ private fun MainScreen(model: AppModel) {
         TopBar(model, onNew = { creating = true })
         HorizontalDivider()
         UpdateBanner(model)
-        if (rows.isEmpty()) {
+        if (loaded == null) {
+            Box(modifier = Modifier.fillMaxSize())
+        } else if (rows.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     when {
@@ -205,7 +248,7 @@ private fun MainScreen(model: AppModel) {
                 )
             }
         } else {
-            DayHeader(model.today())
+            DayHeader(model.today(), rows.first().cells.size)
             HorizontalDivider()
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(items, key = { it.key }) { item ->
@@ -216,6 +259,36 @@ private fun MainScreen(model: AppModel) {
                             HabitRowView(
                                 row,
                                 onOpen = { model.openHabitId = row.id },
+                                menuFor = { cell ->
+                                    val tint = Color(0xFF000000 or row.color.toLong().and(0xFFFFFF))
+                                    if (row.type.isTimeOfDay || row.type == HabitType.NUMERICAL) {
+                                        listOf(
+                                            CellMenuItem(FA_PEN, "Enter value…", tint) {
+                                                editing = if (row.type.isTimeOfDay) EditTarget.Time(row, cell.date)
+                                                else EditTarget.Number(row, cell.date)
+                                            },
+                                            CellMenuItem(FA_TIMES, "Clear", CONTRAST_60, cell.kind == CellKind.UNKNOWN) {
+                                                if (row.type.isTimeOfDay) model.setTime(row.id, cell.date, null)
+                                                else model.setNumber(row.id, cell.date, null)
+                                            }
+                                        )
+                                    } else {
+                                        listOf(
+                                            CellMenuItem(FA_CHECK, "Yes", tint, cell.kind == CellKind.YES || cell.kind == CellKind.YES_AUTO) {
+                                                model.setState(row.id, cell.date, Entry.YES_MANUAL)
+                                            },
+                                            CellMenuItem(FA_TIMES, "No", CONTRAST_80, cell.kind == CellKind.NO) {
+                                                model.setState(row.id, cell.date, Entry.NO)
+                                            },
+                                            CellMenuItem(FA_FORWARD, "Skip", tint, cell.kind == CellKind.SKIP) {
+                                                model.setState(row.id, cell.date, Entry.SKIP)
+                                            },
+                                            CellMenuItem(FA_QUESTION, "Unknown", CONTRAST_60, cell.kind == CellKind.UNKNOWN) {
+                                                model.setState(row.id, cell.date, Entry.UNKNOWN)
+                                            }
+                                        )
+                                    }
+                                },
                                 onCell = { cell ->
                                     when {
                                         row.type.isTimeOfDay -> editing = EditTarget.Time(row, cell.date)
@@ -322,18 +395,44 @@ private fun TopBar(model: AppModel, onNew: () -> Unit) {
     }
 }
 
-/** A top-bar toggle: lit when the habits it names are shown, dim when they are hidden. */
+/**
+ * A top-bar visibility toggle. Shown: a filled teal pill with an open eye. Hidden: an empty
+ * outlined pill with a crossed-out eye and struck-through label, so it reads as "hidden"
+ * rather than merely "unselected".
+ */
 @Composable
 private fun FilterToggle(label: String, shown: Boolean, onChange: (Boolean) -> Unit) {
+    val shape = RoundedCornerShape(50)
+    val textColor by animateColorAsState(if (shown) Color.White else Color(0xFF8A8A8A))
+    val border by animateColorAsState(if (shown) Color(0xFF4DB6AC) else Color(0xFF5E5E5E))
+    val fillStart by animateColorAsState(if (shown) Color(0xFF26A69A) else Color(0x00000000))
+    val fillEnd by animateColorAsState(if (shown) Color(0xFF00796B) else Color(0x00000000))
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (shown) Color(0xFF00897B) else Color(0xFF4A4A4A))
+            .clip(shape)
+            .background(Brush.horizontalGradient(listOf(fillStart, fillEnd)))
+            .border(1.5.dp, border, shape)
             .clickable { onChange(!shown) }
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(start = 12.dp, end = 16.dp, top = 7.dp, bottom = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(if (shown) "✓ $label" else label, color = if (shown) Color.White else CONTRAST_60, fontSize = 13.sp, maxLines = 1)
+        Text(
+            if (shown) FA_EYE else FA_EYE_SLASH,
+            color = textColor,
+            fontFamily = FontAwesome,
+            fontSize = 13.sp,
+            maxLines = 1
+        )
+        Text(
+            label,
+            color = textColor,
+            fontSize = 13.sp,
+            fontWeight = if (shown) FontWeight.Medium else FontWeight.Normal,
+            textDecoration = if (shown) TextDecoration.None else TextDecoration.LineThrough,
+            maxLines = 1,
+            softWrap = false
+        )
     }
 }
 
@@ -372,15 +471,15 @@ private val weekdayNames =listOf("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"
 internal fun toJava(date: LocalDate): java.time.LocalDate = java.time.LocalDate.of(2000, 1, 1).plusDays(date.daysSince2000.toLong())
 
 @Composable
-private fun DayHeader(today: LocalDate) {
+private fun DayHeader(today: LocalDate, days: Int) {
     Row(
         modifier = Modifier.fillMaxWidth().background(Color(0xFFEEEEEE)).padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Spacer(Modifier.weight(1f))
-        for (i in 0 until DAYS) {
+        for (i in 0 until days) {
             val d = toJava(today.minus(i))
-            Column(modifier = Modifier.width(72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(modifier = Modifier.width(DAY_WIDTH), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(weekdayNames[d.dayOfWeek.value % 7], fontSize = 10.sp, color = CONTRAST_60, fontWeight = FontWeight.Bold)
                 Text(d.dayOfMonth.toString(), fontSize = 10.sp, color = CONTRAST_60, fontWeight = FontWeight.Bold)
             }
@@ -389,7 +488,7 @@ private fun DayHeader(today: LocalDate) {
 }
 
 @Composable
-private fun HabitRowView(row: HabitRow, onOpen: () -> Unit, onCell: (Cell) -> Unit) {
+private fun HabitRowView(row: HabitRow, onOpen: () -> Unit, menuFor: (Cell) -> List<CellMenuItem>, onCell: (Cell) -> Unit) {
     val habitColor = Color(0xFF000000 or row.color.toLong().and(0xFFFFFF)).copy(alpha = 1f)
     Row(
         modifier = Modifier.fillMaxWidth().background(CARD_BG).height(56.dp),
@@ -403,8 +502,105 @@ private fun HabitRowView(row: HabitRow, onOpen: () -> Unit, onCell: (Cell) -> Un
             Text(row.name, color = if (row.archived) habitColor.copy(alpha = 0.5f) else habitColor, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         for (cell in row.cells) {
-            CellView(cell, row, habitColor, onClick = { onCell(cell) })
+            CellContextMenu(items = { menuFor(cell) }) {
+                CellView(cell, row, habitColor, onClick = { onCell(cell) })
+            }
         }
+    }
+}
+
+/** One entry of the right-click menu on a habit cell. [current] marks the cell's present state. */
+private class CellMenuItem(
+    val glyph: String,
+    val label: String,
+    val tint: Color,
+    val current: Boolean = false,
+    val onPick: () -> Unit
+)
+
+/**
+ * Right-click menu for a cell: a soft, rounded card whose options each carry a round tinted
+ * icon, with a pill-shaped highlight on hover and a gentle tint on the current state.
+ */
+@Composable
+private fun CellContextMenu(items: () -> List<CellMenuItem>, content: @Composable () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    var click by remember { mutableStateOf(Offset.Zero) }
+    var height by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    Box(
+        modifier = Modifier
+            .onSizeChanged { height = it.height }
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                            click = event.changes.first().position
+                            open = true
+                        }
+                    }
+                }
+            }
+    ) {
+        content()
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            offset = with(density) { DpOffset(click.x.toDp(), (click.y - height).toDp()) },
+            shape = RoundedCornerShape(22.dp),
+            containerColor = Color.White,
+            tonalElevation = 0.dp,
+            shadowElevation = 12.dp,
+            border = BorderStroke(1.dp, Color(0xFFEDEDED))
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                for (item in items()) {
+                    CellMenuRow(item) {
+                        open = false
+                        item.onPick()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CellMenuRow(item: CellMenuItem, onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
+    val hovered by source.collectIsHoveredAsState()
+    val background by animateColorAsState(
+        when {
+            hovered -> item.tint.copy(alpha = 0.16f)
+            item.current -> item.tint.copy(alpha = 0.08f)
+            else -> Color.Transparent
+        }
+    )
+    Row(
+        modifier = Modifier
+            .width(168.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(background)
+            .hoverable(source)
+            .clickable(interactionSource = source, indication = null, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier.size(28.dp).clip(CircleShape).background(item.tint.copy(alpha = 0.16f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(item.glyph, color = item.tint, fontFamily = FontAwesome, fontSize = 12.sp)
+        }
+        Text(
+            item.label,
+            color = Color(0xFF333333),
+            fontSize = 14.sp,
+            fontWeight = if (item.current) FontWeight.Medium else FontWeight.Normal,
+            maxLines = 1
+        )
     }
 }
 
@@ -425,7 +621,7 @@ private fun CellView(cell: Cell, row: HabitRow, habitColor: Color, onClick: () -
         CellKind.VALUE -> null
     }
     Box(
-        modifier = Modifier.width(72.dp).fillMaxSize().clickable(onClick = onClick),
+        modifier = Modifier.width(DAY_WIDTH).fillMaxSize().clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         if (glyph != null) {

@@ -15,6 +15,9 @@ val FontAwesome: FontFamily = FontFamily(Font(resource = "typefaces/FontAwesome.
 const val FA_CHECK = ""
 const val FA_TIMES = ""
 const val FA_QUESTION = ""
+const val FA_EYE = ""
+const val FA_EYE_SLASH = ""
+const val FA_PEN = ""
 const val FA_FORWARD = ""
 
 /**
