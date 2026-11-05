@@ -51,7 +51,8 @@ data class HabitRow(
     val color: Int,
     val score: Double,
     val unit: String,
-    val cells: List<Cell>
+    val cells: List<Cell>,
+    val archived: Boolean = false
 )
 
 data class StreakInfo(val start: LocalDate, val end: LocalDate, val length: Int)
@@ -121,6 +122,10 @@ class AppModel(val dbPath: Path) {
     /** Text typed in the search box of the main list. */
     var searchQuery by mutableStateOf("")
 
+    /** List filters, like the phone's "Show archived" and "Show completed" menu items. */
+    var showArchived by mutableStateOf(false)
+    var showEntered by mutableStateOf(true)
+
     var folder by mutableStateOf(settings.savedFolder())
         private set
 
@@ -165,22 +170,43 @@ class AppModel(val dbPath: Path) {
         scheduler.scheduleAtFixedRate({ refreshToday() }, 1, 1, TimeUnit.MINUTES)
         folder?.let { startSync(it) }
         if (Updater.currentBuild() != null) {
-            updates.scheduleWithFixedDelay({ checkForUpdate() }, 10, 6 * 3600L, TimeUnit.SECONDS)
+            updates.schedule({ checkForUpdate() }, 10, TimeUnit.SECONDS)
         }
     }
 
     /** Looks for a newer installer. Being offline or rate-limited is not an error: it tries again later. */
-    private fun checkForUpdate() {
+    private fun checkForUpdate(manual: Boolean = false) {
         val current = Updater.currentBuild() ?: return
         try {
             val found = Updater.findUpdate(Updater.fetchReleases(), current)
-            if (found != null && found != update) {
+            if (found != null && (found != update || manual)) {
                 update = found
                 updateDismissed = false
             }
+            if (manual) showUpdateNote(if (found == null) "You have the latest build ($current)." else null)
         } catch (e: Exception) {
-            // Try again at the next check.
+            if (manual) showUpdateNote("Couldn't check for updates: ${e.message ?: e.javaClass.simpleName}")
+            // Otherwise it tries again at the next check.
         }
+    }
+
+    /** The result of the last manual "Updates" click, shown in the top bar for a few seconds. */
+    var updateNote by mutableStateOf<String?>(null)
+        private set
+
+    /** Checks now instead of waiting for the next scheduled check, and says what it found. */
+    fun checkForUpdateNow() {
+        if (Updater.currentBuild() == null) {
+            showUpdateNote("Running from source (DESKTOP.bat): updates only apply to the installed app.")
+            return
+        }
+        updateNote = "Checking for updates…"
+        updates.execute { checkForUpdate(manual = true) }
+    }
+
+    private fun showUpdateNote(text: String?) {
+        updateNote = text
+        if (text != null) updates.schedule({ if (updateNote == text) updateNote = null }, 6, TimeUnit.SECONDS)
     }
 
     /** Downloads the update, starts its installer, and asks the window to close. */
@@ -215,11 +241,15 @@ class AppModel(val dbPath: Path) {
 
     fun today(): LocalDate = getToday()
 
-    /** Same matching rule as the phone: name, question or description contains the query. */
-    fun rows(days: Int, query: String = ""): List<HabitRow> = synchronized(lock) {
+    /**
+     * Same matching rule as the phone: name, question or description contains the query.
+     * Archived habits are hidden unless [showArchived]; habits that already have an entry today
+     * (a check, a number or a skip) are hidden when [showEntered] is false.
+     */
+    fun rows(days: Int, query: String = "", showArchived: Boolean = false, showEntered: Boolean = true): List<HabitRow> = synchronized(lock) {
         val today = getToday()
         val theme = LightTheme()
-        val matcher = HabitMatcher(searchQuery = query)
+        val matcher = HabitMatcher(isArchivedAllowed = showArchived, isEnteredAllowed = showEntered, searchQuery = query)
         habitList.filter { matcher.matches(it) }.map { habit ->
             val c = theme.color(habit.color)
             HabitRow(
@@ -230,7 +260,8 @@ class AppModel(val dbPath: Path) {
                 color = ((c.red * 255).roundToInt() shl 16) or ((c.green * 255).roundToInt() shl 8) or (c.blue * 255).roundToInt(),
                 score = habit.scores[today].value,
                 unit = habit.unit,
-                cells = (0 until days).map { cellFor(habit, today.minus(it)) }
+                cells = (0 until days).map { cellFor(habit, today.minus(it)) },
+                archived = habit.isArchived
             )
         }
     }
@@ -541,7 +572,6 @@ class AppModel(val dbPath: Path) {
 
     companion object {
         const val MIDNIGHT_DELAY_HOURS = 3
-
         fun formatTime(minutes: Int): String = "%02d:%02d".format(minutes / 60, minutes % 60)
 
         fun formatNumber(value: Double): String =

@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -179,7 +181,9 @@ private fun MainScreen(model: AppModel) {
     // Reading revision makes the list rebuild after every edit or sync that changed something.
     val revision = model.revision
     val query = model.searchQuery
-    val rows = remember(revision, query) { model.rows(DAYS, query) }
+    val showArchived = model.showArchived
+    val showEntered = model.showEntered
+    val rows = remember(revision, query, showArchived, showEntered) { model.rows(DAYS, query, showArchived, showEntered) }
     val items = remember(rows) { buildListItems(rows) }
     var editing by remember { mutableStateOf<EditTarget?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -193,6 +197,7 @@ private fun MainScreen(model: AppModel) {
                 Text(
                     when {
                         query.isNotBlank() -> "No habits match your search."
+                        !showEntered -> "Every habit already has an entry today."
                         model.folder != null -> "No habits yet. They appear here after the first sync."
                         else -> "No habits yet."
                     },
@@ -280,6 +285,7 @@ private fun UpdateBanner(model: AppModel) {
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun TopBar(model: AppModel, onNew: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().background(Color(0xFF333333)).padding(horizontal = 16.dp, vertical = 10.dp),
@@ -287,20 +293,47 @@ private fun TopBar(model: AppModel, onNew: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Habits", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium)
-        Spacer(Modifier.weight(1f))
-        SearchField(model.searchQuery, onChange = { model.searchQuery = it })
-        TextButton(onClick = onNew) { Text("+ New habit", color = Color.White) }
-        if (model.folder != null) {
-            Text(model.syncStatus, color = Color(0xFFE0E0E0), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Button(enabled = !model.syncing, onClick = { model.syncNow() }) { Text("Sync now") }
-            TextButton(onClick = { pickFolder()?.let { model.chooseFolder(Paths.get(it)) } }) {
-                Text("Folder…", color = Color.White)
-            }
-        } else {
-            TextButton(onClick = { pickFolder()?.let { model.chooseFolder(Paths.get(it)) } }) {
-                Text("Set up sync…", color = Color.White)
+        // Everything else sits right-aligned on one line when there is room, and wraps onto
+        // more lines in a narrow window, so no button is ever squeezed into a thin column.
+        FlowRow(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+            itemVerticalAlignment = Alignment.CenterVertically
+        ) {
+            SearchField(model.searchQuery, onChange = { model.searchQuery = it })
+            TextButton(onClick = onNew) { Text("+ New habit", color = Color.White, maxLines = 1, softWrap = false) }
+            FilterToggle("Archived", model.showArchived) { model.showArchived = it }
+            FilterToggle("Entered", model.showEntered) { model.showEntered = it }
+            model.updateNote?.let { Text(it, color = Color(0xFFE0E0E0), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            TextButton(onClick = { model.checkForUpdateNow() }) { Text("Check for updates", color = Color.White, maxLines = 1, softWrap = false) }
+            if (model.folder != null) {
+                Text(model.syncStatus, color = Color(0xFFE0E0E0), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Button(enabled = !model.syncing, onClick = { model.syncNow() }) { Text("Sync now", maxLines = 1, softWrap = false) }
+                TextButton(onClick = { pickFolder()?.let { model.chooseFolder(Paths.get(it)) } }) {
+                    Text("Folder…", color = Color.White, maxLines = 1, softWrap = false)
+                }
+            } else {
+                TextButton(onClick = { pickFolder()?.let { model.chooseFolder(Paths.get(it)) } }) {
+                    Text("Set up sync…", color = Color.White, maxLines = 1, softWrap = false)
+                }
             }
         }
+    }
+}
+
+/** A top-bar toggle: lit when the habits it names are shown, dim when they are hidden. */
+@Composable
+private fun FilterToggle(label: String, shown: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (shown) Color(0xFF00897B) else Color(0xFF4A4A4A))
+            .clickable { onChange(!shown) }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(if (shown) "✓ $label" else label, color = if (shown) Color.White else CONTRAST_60, fontSize = 13.sp, maxLines = 1)
     }
 }
 
@@ -367,7 +400,7 @@ private fun HabitRowView(row: HabitRow, onOpen: () -> Unit, onCell: (Cell) -> Un
             modifier = Modifier.weight(1f).fillMaxSize().clickable(onClick = onOpen).padding(start = 12.dp, end = 8.dp),
             contentAlignment = Alignment.CenterStart
         ) {
-            Text(row.name, color = habitColor, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(row.name, color = if (row.archived) habitColor.copy(alpha = 0.5f) else habitColor, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         for (cell in row.cells) {
             CellView(cell, row, habitColor, onClick = { onCell(cell) })
