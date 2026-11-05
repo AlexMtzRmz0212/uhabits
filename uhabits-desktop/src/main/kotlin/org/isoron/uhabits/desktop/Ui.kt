@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -34,7 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,13 +51,17 @@ private const val DAYS = 7
 private val appColors = lightColorScheme(
     primary = Color(0xFF00897B),
     onPrimary = Color.White,
-    background = Color(0xFFF4F4F4),
+    background = Color(0xFFEEEEEE),
     surface = Color.White
 )
 
+private val CARD_BG = Color(0xFFFAFAFA)
+private val CONTRAST_60 = Color(0xFF9E9E9E)
+private val CONTRAST_80 = Color(0xFF616161)
+
 @Composable
 fun App(model: AppModel) {
-    MaterialTheme(colorScheme = appColors) {
+    MaterialTheme(colorScheme = appColors, typography = appTypography()) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             val openId = model.openHabitId
             when {
@@ -117,6 +124,48 @@ private fun SetupScreen(model: AppModel) {
     }
 }
 
+/** One line of the main list: a category header or a habit. */
+internal sealed interface ListItem {
+    val key: String
+
+    data class Header(val title: String, val index: Int) : ListItem {
+        override val key get() = "category:$index"
+    }
+
+    data class Habit(val row: HabitRow) : ListItem {
+        override val key get() = "habit:${row.id}"
+    }
+}
+
+/**
+ * Same rule as the phone: a header is inserted whenever the category changes. Habits with no
+ * category that follow a category (for example pinned to the bottom) get a blank header, so
+ * they are not read as part of the group above. Leading uncategorized habits get no header.
+ */
+internal fun buildListItems(rows: List<HabitRow>): List<ListItem> {
+    val result = mutableListOf<ListItem>()
+    var current = ""
+    for (row in rows) {
+        val category = row.category.trim()
+        if (category != current) {
+            result += ListItem.Header(category, result.size)
+            current = category
+        }
+        result += ListItem.Habit(row)
+    }
+    return result
+}
+
+@Composable
+private fun CategoryHeader(title: String) {
+    Box(
+        modifier = Modifier.fillMaxWidth().height(48.dp).padding(start = 8.dp, end = 8.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Text(title, color = CONTRAST_80, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
 private sealed interface EditTarget {
     val row: HabitRow
     val date: LocalDate
@@ -129,7 +178,9 @@ private sealed interface EditTarget {
 private fun MainScreen(model: AppModel) {
     // Reading revision makes the list rebuild after every edit or sync that changed something.
     val revision = model.revision
-    val rows = remember(revision) { model.rows(DAYS) }
+    val query = model.searchQuery
+    val rows = remember(revision, query) { model.rows(DAYS, query) }
+    val items = remember(rows) { buildListItems(rows) }
     var editing by remember { mutableStateOf<EditTarget?>(null) }
     var creating by remember { mutableStateOf(false) }
 
@@ -140,7 +191,11 @@ private fun MainScreen(model: AppModel) {
         if (rows.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    if (model.folder != null) "No habits yet. They appear here after the first sync." else "No habits yet.",
+                    when {
+                        query.isNotBlank() -> "No habits match your search."
+                        model.folder != null -> "No habits yet. They appear here after the first sync."
+                        else -> "No habits yet."
+                    },
                     color = Color.Gray
                 )
             }
@@ -148,19 +203,25 @@ private fun MainScreen(model: AppModel) {
             DayHeader(model.today())
             HorizontalDivider()
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(rows, key = { it.id }) { row ->
-                    HabitRowView(
-                        row,
-                        onOpen = { model.openHabitId = row.id },
-                        onCell = { cell ->
-                            when {
-                                row.type.isTimeOfDay -> editing = EditTarget.Time(row, cell.date)
-                                row.type == HabitType.NUMERICAL -> editing = EditTarget.Number(row, cell.date)
-                                else -> model.toggle(row.id, cell.date)
-                            }
+                items(items, key = { it.key }) { item ->
+                    when (item) {
+                        is ListItem.Header -> CategoryHeader(item.title)
+                        is ListItem.Habit -> {
+                            val row = item.row
+                            HabitRowView(
+                                row,
+                                onOpen = { model.openHabitId = row.id },
+                                onCell = { cell ->
+                                    when {
+                                        row.type.isTimeOfDay -> editing = EditTarget.Time(row, cell.date)
+                                        row.type == HabitType.NUMERICAL -> editing = EditTarget.Number(row, cell.date)
+                                        else -> model.toggle(row.id, cell.date)
+                                    }
+                                }
+                            )
+                            HorizontalDivider(color = Color(0xFFE0E0E0))
                         }
-                    )
-                    HorizontalDivider(color = Color(0xFFE0E0E0))
+                    }
                 }
             }
         }
@@ -227,6 +288,7 @@ private fun TopBar(model: AppModel, onNew: () -> Unit) {
     ) {
         Text("Habits", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.weight(1f))
+        SearchField(model.searchQuery, onChange = { model.searchQuery = it })
         TextButton(onClick = onNew) { Text("+ New habit", color = Color.White) }
         if (model.folder != null) {
             Text(model.syncStatus, color = Color(0xFFE0E0E0), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -242,23 +304,52 @@ private fun TopBar(model: AppModel, onNew: () -> Unit) {
     }
 }
 
-private val weekdayNames = listOf("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT")
+/** Search box for the top bar. Matches name, question and description, like the phone. */
+@Composable
+private fun SearchField(value: String, onChange: (String) -> Unit) {
+    Row(
+        modifier = Modifier.width(220.dp).height(36.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF4A4A4A)).padding(start = 14.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            if (value.isEmpty()) Text("Search", color = CONTRAST_60, fontSize = 14.sp)
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                singleLine = true,
+                textStyle = TextStyle(color = Color.White, fontSize = 14.sp, fontFamily = AppFont),
+                cursorBrush = SolidColor(Color.White),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        if (value.isNotEmpty()) {
+            Text(
+                FA_TIMES,
+                color = CONTRAST_60,
+                fontFamily = FontAwesome,
+                fontSize = 14.sp,
+                modifier = Modifier.clip(RoundedCornerShape(14.dp)).clickable { onChange("") }.padding(horizontal = 9.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
+private val weekdayNames =listOf("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT")
 
 internal fun toJava(date: LocalDate): java.time.LocalDate = java.time.LocalDate.of(2000, 1, 1).plusDays(date.daysSince2000.toLong())
 
 @Composable
 private fun DayHeader(today: LocalDate) {
     Row(
-        modifier = Modifier.fillMaxWidth().background(Color.White).padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().background(Color(0xFFEEEEEE)).padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Spacer(Modifier.weight(1f))
-        Spacer(Modifier.width(64.dp))
         for (i in 0 until DAYS) {
             val d = toJava(today.minus(i))
             Column(modifier = Modifier.width(72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(weekdayNames[d.dayOfWeek.value % 7], fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                Text(d.dayOfMonth.toString(), fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                Text(weekdayNames[d.dayOfWeek.value % 7], fontSize = 10.sp, color = CONTRAST_60, fontWeight = FontWeight.Bold)
+                Text(d.dayOfMonth.toString(), fontSize = 10.sp, color = CONTRAST_60, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -268,23 +359,16 @@ private fun DayHeader(today: LocalDate) {
 private fun HabitRowView(row: HabitRow, onOpen: () -> Unit, onCell: (Cell) -> Unit) {
     val habitColor = Color(0xFF000000 or row.color.toLong().and(0xFFFFFF)).copy(alpha = 1f)
     Row(
-        modifier = Modifier.fillMaxWidth().background(Color.White).height(56.dp),
+        modifier = Modifier.fillMaxWidth().background(CARD_BG).height(56.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(modifier = Modifier.width(5.dp).fillMaxSize().background(habitColor))
-        Column(modifier = Modifier.weight(1f).clickable(onClick = onOpen).padding(start = 12.dp, end = 8.dp)) {
-            Text(row.name, color = habitColor, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (row.category.isNotEmpty()) {
-                Text(row.category, color = Color.Gray, fontSize = 11.sp, maxLines = 1)
-            }
+        Box(
+            modifier = Modifier.weight(1f).fillMaxSize().clickable(onClick = onOpen).padding(start = 12.dp, end = 8.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(row.name, color = habitColor, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        Text(
-            "${(row.score * 100).toInt()}%",
-            modifier = Modifier.width(64.dp),
-            textAlign = TextAlign.Center,
-            color = Color.Gray,
-            fontSize = 13.sp
-        )
         for (cell in row.cells) {
             CellView(cell, row, habitColor, onClick = { onCell(cell) })
         }
@@ -293,19 +377,34 @@ private fun HabitRowView(row: HabitRow, onOpen: () -> Unit, onCell: (Cell) -> Un
 
 @Composable
 private fun CellView(cell: Cell, row: HabitRow, habitColor: Color, onClick: () -> Unit) {
-    val (color, weight) = when (cell.kind) {
-        CellKind.YES -> habitColor to FontWeight.Bold
-        CellKind.YES_AUTO -> habitColor.copy(alpha = 0.45f) to FontWeight.Normal
-        CellKind.NO -> Color(0xFF9E9E9E) to FontWeight.Bold
-        CellKind.SKIP -> Color(0xFF9E9E9E) to FontWeight.Normal
-        CellKind.UNKNOWN -> Color(0xFFE0E0E0) to FontWeight.Normal
-        CellKind.VALUE -> habitColor to FontWeight.Medium
+    // Same glyphs, sizes and colours as the phone's checkmark button.
+    val color = when (cell.kind) {
+        CellKind.YES, CellKind.SKIP, CellKind.VALUE -> habitColor
+        CellKind.YES_AUTO -> habitColor.copy(alpha = 0.45f)
+        CellKind.NO -> CONTRAST_60
+        CellKind.UNKNOWN -> Color(0xFFD8D8D8)
+    }
+    val glyph = when (cell.kind) {
+        CellKind.YES, CellKind.YES_AUTO -> FA_CHECK
+        CellKind.NO -> FA_TIMES
+        CellKind.SKIP -> FA_FORWARD
+        CellKind.UNKNOWN -> FA_QUESTION
+        CellKind.VALUE -> null
     }
     Box(
         modifier = Modifier.width(72.dp).fillMaxSize().clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(cell.text, color = color, fontWeight = weight, fontSize = if (cell.kind == CellKind.VALUE) 14.sp else 20.sp)
+        if (glyph != null) {
+            Text(
+                glyph,
+                color = color,
+                fontFamily = FontAwesome,
+                fontSize = if (cell.kind == CellKind.UNKNOWN) 12.sp else 14.sp
+            )
+        } else {
+            Text(cell.text, color = color, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        }
     }
 }
 

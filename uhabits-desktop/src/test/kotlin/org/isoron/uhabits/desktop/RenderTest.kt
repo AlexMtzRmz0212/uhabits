@@ -84,6 +84,44 @@ class RenderTest {
     }
 
     @Test
+    fun testSearchFiltersLikeThePhone() {
+        val dbPath = tmp.resolve("uhabits.db")
+        seed(dbPath)
+        val m = AppModel(dbPath).also { model = it }
+        assertEquals(listOf("Water"), m.rows(7, "wat").map { it.name })
+        assertEquals(listOf("Read 20 minutes"), m.rows(7, "  READ ").map { it.name })
+        // The category is not searched, as on the phone.
+        assertTrue(m.rows(7, "Health").isEmpty())
+        assertEquals(3, m.rows(7, "").size)
+
+        m.skipSync()
+        m.searchQuery = "zzz"
+        assertTrue(render(m, "main-no-match").size > 1000)
+        m.searchQuery = "wat"
+        assertTrue(render(m, "main-search").size > 1000)
+    }
+
+    @Test
+    fun testCategoryHeadersGroupTheList() {
+        val dbPath = tmp.resolve("uhabits.db")
+        seed(dbPath)
+        val m = AppModel(dbPath).also { model = it }
+        val items = buildListItems(m.rows(7))
+        // Uncategorized habit first with no header, then one header per category.
+        assertEquals(
+            listOf("habit:Wake up", "header:Health", "habit:Water", "header:Mind", "habit:Read 20 minutes"),
+            items.map {
+                when (it) {
+                    is ListItem.Header -> "header:${it.title}"
+                    is ListItem.Habit -> "habit:${it.row.name}"
+                }
+            }
+        )
+        assertEquals(items.size, items.map { it.key }.distinct().size)
+        assertTrue(m.rows(7).none { it.category.isEmpty() && it.name != "Wake up" })
+    }
+
+    @Test
     fun testTogglingADayChangesTheCell() {
         val dbPath = tmp.resolve("uhabits.db")
         seed(dbPath)

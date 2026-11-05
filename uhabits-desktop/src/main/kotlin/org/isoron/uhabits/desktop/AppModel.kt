@@ -18,6 +18,7 @@ import org.isoron.uhabits.core.commands.EditHabitCommand
 import org.isoron.uhabits.core.models.Entry
 import org.isoron.uhabits.core.models.Frequency
 import org.isoron.uhabits.core.models.Habit
+import org.isoron.uhabits.core.models.HabitMatcher
 import org.isoron.uhabits.core.models.HabitPin
 import org.isoron.uhabits.core.models.HabitType
 import org.isoron.uhabits.core.models.NumericalHabitType
@@ -117,6 +118,9 @@ class AppModel(val dbPath: Path) {
     var revision by mutableStateOf(0)
         private set
 
+    /** Text typed in the search box of the main list. */
+    var searchQuery by mutableStateOf("")
+
     var folder by mutableStateOf(settings.savedFolder())
         private set
 
@@ -211,15 +215,17 @@ class AppModel(val dbPath: Path) {
 
     fun today(): LocalDate = getToday()
 
-    fun rows(days: Int): List<HabitRow> = synchronized(lock) {
+    /** Same matching rule as the phone: name, question or description contains the query. */
+    fun rows(days: Int, query: String = ""): List<HabitRow> = synchronized(lock) {
         val today = getToday()
         val theme = LightTheme()
-        habitList.filter { !it.isArchived }.map { habit ->
+        val matcher = HabitMatcher(searchQuery = query)
+        habitList.filter { matcher.matches(it) }.map { habit ->
             val c = theme.color(habit.color)
             HabitRow(
                 id = habit.id!!,
                 name = habit.name,
-                category = habit.category,
+                category = habit.effectiveCategory,
                 type = habit.type,
                 color = ((c.red * 255).roundToInt() shl 16) or ((c.green * 255).roundToInt() shl 8) or (c.blue * 255).roundToInt(),
                 score = habit.scores[today].value,
