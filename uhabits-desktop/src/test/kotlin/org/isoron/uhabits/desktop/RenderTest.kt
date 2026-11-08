@@ -219,6 +219,44 @@ class RenderTest {
     }
 
     @Test
+    fun testMeasurableHabitCanBecomeTimeOfDay() {
+        val dbPath = tmp.resolve("uhabits.db")
+        seed(dbPath)
+        val m = AppModel(dbPath).also { model = it }
+        val water = m.rows(7).first { it.name == "Water" }
+        val today = m.today()
+
+        // Water has entries 5..10 (x1000) for the past days: 5.00 .. 10.00 are valid H.MM times.
+        // A value such as 0.5 is not a time, so the change is refused and nothing is touched.
+        m.setNumber(water.id, today, 0.5)
+        val data = m.editorFor(water.id)!!.copy(type = org.isoron.uhabits.core.models.HabitType.TIME_OF_DAY)
+        assertTrue(m.saveHabit(water.id, data)!!.contains("not valid times"))
+        assertEquals(org.isoron.uhabits.core.models.HabitType.NUMERICAL, m.editorFor(water.id)!!.type)
+
+        m.setNumber(water.id, today, 6.4)
+        m.setNumber(water.id, today.minus(1), 22.15)
+        assertEquals(null, m.saveHabit(water.id, data))
+        val row = m.rows(7).first { it.id == water.id }
+        assertEquals(org.isoron.uhabits.core.models.HabitType.TIME_OF_DAY, row.type)
+        assertEquals("06:40", row.cells[0].text)
+        assertEquals("22:15", row.cells[1].text)
+        assertEquals("06:00", row.cells[2].text) // 6.0 hours
+    }
+
+    @Test
+    fun testTimeDialogRendersAsClock() {
+        val scene = ImageComposeScene(width = 700, height = 700, density = Density(1f)) {
+            androidx.compose.material3.MaterialTheme {
+                ValueDialog("Wake up", org.isoron.platform.time.LocalDate(2026, 11, 7), true, "", 400.0, {}, {})
+            }
+        }
+        val bytes = scene.render().encodeToData(EncodedImageFormat.PNG)!!.bytes
+        scene.close()
+        Files.write(Path.of("build", "screenshots").also { Files.createDirectories(it) }.resolve("time-dialog.png"), bytes)
+        assertTrue(bytes.size > 1000)
+    }
+
+    @Test
     fun testEditorDialogRenders() {
         val dbPath = tmp.resolve("uhabits.db")
         seed(dbPath)

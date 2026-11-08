@@ -321,6 +321,27 @@ internal fun EditorDialog(model: AppModel, habitId: Long?, onClose: () -> Unit) 
                 modifier = Modifier.width(460.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                if (!isNew && initial.type == HabitType.NUMERICAL) {
+                    Text("Type", fontSize = 12.sp, color = Color.Gray)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(HabitType.NUMERICAL to "Measurable", HabitType.TIME_OF_DAY to "Time of day").forEach { (type, label) ->
+                            FilterChip(
+                                selected = data.type == type,
+                                onClick = {
+                                    data = data.copy(type = type)
+                                    target = ""
+                                },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                    if (data.type == HabitType.TIME_OF_DAY) {
+                        Text(
+                            "Saved numbers become times: 6.40 turns into 06:40. Entries that are not valid times stop the change.",
+                            fontSize = 12.sp, color = Color.Gray
+                        )
+                    }
+                }
                 if (isNew) {
                     Text("Type", fontSize = 12.sp, color = Color.Gray)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

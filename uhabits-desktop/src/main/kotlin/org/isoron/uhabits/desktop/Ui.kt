@@ -47,7 +47,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimeInput
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -647,16 +651,19 @@ internal fun ValueDialog(
     onDismiss: () -> Unit,
     onSave: (Double?) -> Unit
 ) {
+    if (isTime) {
+        TimeDialog(title, date, initial, onDismiss, onSave)
+        return
+    }
     var text by remember {
         mutableStateOf(
             when {
                 initial == null -> ""
-                isTime -> AppModel.formatTime(initial.toInt())
                 else -> AppModel.formatNumber(initial)
             }
         )
     }
-    val parsed: Double? = if (isTime) AppModel.parseTime(text)?.toDouble() else text.trim().replace(',', '.').toDoubleOrNull()
+    val parsed: Double? = text.trim().replace(',', '.').toDoubleOrNull()
     val valid = text.isBlank() || parsed != null
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -670,7 +677,7 @@ internal fun ValueDialog(
                     onValueChange = { text = it },
                     singleLine = true,
                     isError = !valid,
-                    label = { Text(if (isTime) "Time (HH:MM)" else unitLabel) }
+                    label = { Text(unitLabel) }
                 )
             }
         },
@@ -679,6 +686,42 @@ internal fun ValueDialog(
         },
         dismissButton = {
             Row {
+                TextButton(onClick = { onSave(null) }) { Text("Clear") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        }
+    )
+}
+
+/** A clock-face time picker, like the phone's, with a switch to typing the hours and minutes. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimeDialog(
+    title: String,
+    date: LocalDate,
+    initial: Double?,
+    onDismiss: () -> Unit,
+    onSave: (Double?) -> Unit
+) {
+    val start = initial?.toInt() ?: java.time.LocalTime.now().let { it.hour * 60 + it.minute }
+    val state = rememberTimePickerState(initialHour = start / 60, initialMinute = start % 60, is24Hour = true)
+    var typing by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val d = toJava(date)
+                Text("${weekdayNames[d.dayOfWeek.value % 7]} ${d.dayOfMonth}", color = Color.Gray)
+                if (typing) TimeInput(state) else TimePicker(state)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave((state.hour * 60 + state.minute).toDouble()) }) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { typing = !typing }) { Text(if (typing) "Clock" else "Keyboard") }
                 TextButton(onClick = { onSave(null) }) { Text("Clear") }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
             }

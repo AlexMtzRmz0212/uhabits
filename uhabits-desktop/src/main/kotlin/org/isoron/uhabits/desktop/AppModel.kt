@@ -472,6 +472,7 @@ class AppModel(val dbPath: Path) {
             }
         }
         if (name.isEmpty()) return "Give the habit a name."
+        awaitEdits() // entries typed a moment ago must be saved before they are converted
         if (d.freqNum < 1 || d.freqDen < 1 || d.freqNum > d.freqDen) {
             return "The frequency must be at least once, and no more than once per day."
         }
@@ -490,8 +491,24 @@ class AppModel(val dbPath: Path) {
                 target.category = d.category.trim()
                 target.color = PaletteColor(d.colorIndex)
                 target.frequency = Frequency(d.freqNum, d.freqDen)
-                if (habitId == null) target.type = d.type
-                target.unit = d.unit.trim()
+                var converted: List<Pair<LocalDate, Int>> = emptyList()
+                if (habitId == null) {
+                    target.type = d.type
+                } else if (d.type != target.type) {
+                    if (target.type != HabitType.NUMERICAL || d.type != HabitType.TIME_OF_DAY) {
+                        return "Only a measurable habit can be changed to a time of day habit."
+                    }
+                    val plan = planTimeConversion(habitList.getById(habitId)!!.originalEntries.getKnown())
+                    if (plan.rejected.isNotEmpty()) {
+                        val shown = plan.rejected.take(3).joinToString { "${it.date.day}/${it.date.month}: ${formatNumber(it.value / 1000.0)}" }
+                        return "Cannot change to time of day: ${plan.rejected.size} entries are not valid times " +
+                            "(write 6.40 for 06:40). First ones: $shown."
+                    }
+                    converted = plan.changes
+                    target.type = d.type
+                    target.unit = ""
+                }
+                if (target.type == HabitType.NUMERICAL) target.unit = d.unit.trim()
                 target.targetType = d.targetType
                 target.targetValue = d.targetValue
                 target.pin = if (target.type == HabitType.WAKE_UP || target.type == HabitType.BEDTIME) d.pin else HabitPin.NONE
@@ -499,6 +516,12 @@ class AppModel(val dbPath: Path) {
                     CreateHabitCommand(factory, habitList, target).run()
                 } else {
                     EditHabitCommand(habitList, habitId, target).run()
+                    val saved = habitList.getById(habitId)
+                    if (saved != null) {
+                        for ((date, value) in converted) {
+                            CreateRepetitionCommand(habitList, saved, date, value, saved.originalEntries.get(date).notes).run()
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -626,6 +649,26 @@ class AppModel(val dbPath: Path) {
 
         fun formatNumber(value: Double): String =
             if (value == value.toLong().toDouble()) value.toLong().toString() else "%.2f".format(value).trimEnd('0').trimEnd('.')
+
+        class TimeConversion(val changes: List<Pair<LocalDate, Int>>, val rejected: List<Entry>)
+
+        /**
+         * How the entries of a measurable habit become time entries. A number is read as hours
+         * and minutes, 6.40 meaning 06:40 (stored as 6400). The special values (no, skip, unknown,
+         * under 4) stay as they are; anything else that is not a valid time is [TimeConversion.rejected].
+         */
+        fun planTimeConversion(entries: List<Entry>): TimeConversion {
+            val changes = mutableListOf<Pair<LocalDate, Int>>()
+            val rejected = mutableListOf<Entry>()
+            for (e in entries) {
+                val v = e.value
+                if (v < 0 || v <= Entry.SKIP) continue
+                val h = v / 1000
+                val m = (v % 1000) / 10
+                if (v < 1000 || v % 10 != 0 || h > 23 || m > 59) rejected.add(e) else changes.add(e.date to TimeOfDay.encode(h * 60 + m))
+            }
+            return TimeConversion(changes, rejected)
+        }
 
         /** Reads "7:30", "07:30" or "0730"; returns minutes since midnight, or null if invalid. */
         fun parseTime(text: String): Int? {
