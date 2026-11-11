@@ -33,7 +33,7 @@ class DesktopSync(db: Database, folder: SyncFolder, private val lock: Any = Any(
 class FolderWatcher(
     private val desktop: DesktopSync,
     private val dir: Path,
-    private val intervalSeconds: Long = 120,
+    private val intervalSeconds: Long = 30,
     private val debounceMillis: Long = 1500,
     private val onReport: (SyncReport) -> Unit = {},
     private val onError: (Exception) -> Unit = {}

@@ -15,8 +15,11 @@ import org.isoron.uhabits.HabitsApplication
 import org.isoron.uhabits.core.models.sqlite.SQLModelFactory
 import org.isoron.uhabits.core.models.sqlite.SQLiteHabitList
 import org.isoron.uhabits.core.sync.SyncEngine
+import org.isoron.uhabits.core.sync.SyncSummary
 import org.isoron.uhabits.utils.DatabaseUtils
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -58,14 +61,9 @@ class SyncManager(context: Context) {
             Log.i(TAG, "Sync done: $report")
 
             if (report.changed) refreshAfterMerge(component.habitList as SQLiteHabitList)
-            saveStatus(
-                describe(report)
-            )
-            summary = when {
-                report.changed -> "Synced: got ${report.applied} changes"
-                report.peersSeen == 0 -> "Up to date, but no other device's file found yet"
-                else -> "Already up to date"
-            }
+            val text = describe(report)
+            saveStatus(text)
+            summary = "Synced: $text"
         } catch (e: Exception) {
             Log.e(TAG, "Sync failed", e)
             summary = "Sync failed: ${e.message ?: e.javaClass.simpleName}"
@@ -79,19 +77,8 @@ class SyncManager(context: Context) {
 
     /** What happened, in words the settings screen can show: it must say if the other device's file was not found. */
     private fun describe(report: org.isoron.uhabits.core.sync.SyncReport): String {
-        val parts = mutableListOf<String>()
-        parts.add(if (report.changed) "got ${report.applied} changes" else "up to date")
-        parts.add(
-            when (report.peersSeen) {
-                0 -> "no other device's file found"
-                1 -> "1 other file seen"
-                else -> "${report.peersSeen} other files seen"
-            }
-        )
-        if (report.unreadable > 0) parts.add("${report.unreadable} could not be read")
-        parts.addAll(report.peerInfo)
-        report.errors.forEach { parts.add("skipped $it") }
-        return parts.joinToString(", ")
+        val clock = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+        return SyncSummary.describe(report, System.currentTimeMillis()) { clock.format(it) }
     }
 
     private fun refreshAfterMerge(habitList: SQLiteHabitList) {
@@ -124,6 +111,24 @@ class SyncManager(context: Context) {
         private val lock = Any()
         private val executor = Executors.newSingleThreadExecutor()
         private val lastStart = AtomicLong(0)
+        private val soonScheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
+        private var pendingSoon: ScheduledFuture<*>? = null
+
+        /**
+         * Shares a local edit a few seconds from now. Another edit inside the delay restarts the
+         * wait, so a burst of taps is sent once.
+         */
+        @Synchronized
+        fun requestSyncSoon(context: Context, delayMillis: Long = 5_000) {
+            val manager = SyncManager(context)
+            if (!manager.isEnabled) return
+            pendingSoon?.cancel(false)
+            pendingSoon = soonScheduler.schedule(
+                { executor.execute { manager.syncNow() } },
+                delayMillis,
+                TimeUnit.MILLISECONDS
+            )
+        }
 
         /** Runs a round in the background unless one started less than [minGapMillis] ago. */
         fun requestSync(context: Context, minGapMillis: Long = 30_000) {

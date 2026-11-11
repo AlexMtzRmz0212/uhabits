@@ -32,6 +32,7 @@ import org.isoron.uhabits.core.models.TimeOfDay
 import org.isoron.uhabits.core.models.sqlite.SQLModelFactory
 import org.isoron.uhabits.core.models.sqlite.SQLiteHabitList
 import org.isoron.uhabits.core.sync.SyncReport
+import org.isoron.uhabits.core.sync.SyncSummary
 import org.isoron.uhabits.core.ui.views.LightTheme
 import java.nio.file.Path
 import java.util.concurrent.Executors
@@ -155,6 +156,9 @@ class AppModel(val dbPath: Path) {
         private set
 
     var syncStatus by mutableStateOf("Not syncing")
+
+    /** Second line under [syncStatus]: whether this device's changes were sent and how fresh the other device's file is. */
+    var syncDetail by mutableStateOf("")
         private set
 
     var error by mutableStateOf<String?>(null)
@@ -598,12 +602,17 @@ class AppModel(val dbPath: Path) {
         }
         syncing = false
         val time = java.time.LocalTime.now().withNano(0).toString().take(5)
-        syncStatus = if (report.errors.isEmpty()) "Synced at $time" else "Synced at $time, skipped: ${report.errors.joinToString("; ")}"
+        syncStatus = "Synced at $time"
+        val clock = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+        syncDetail = SyncSummary.describe(report, System.currentTimeMillis()) {
+            java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).format(clock)
+        }
     }
 
     private fun handleError(e: Exception) {
         syncing = false
         syncStatus = "Sync failed: ${e.message ?: e.javaClass.simpleName}"
+        syncDetail = ""
     }
 
     /** Runs a round now, in the background. */
@@ -611,6 +620,7 @@ class AppModel(val dbPath: Path) {
         val d = desktop ?: return
         syncing = true
         syncStatus = "Syncing…"
+        syncDetail = ""
         scheduler.execute {
             try {
                 handleReport(d.syncOnce())

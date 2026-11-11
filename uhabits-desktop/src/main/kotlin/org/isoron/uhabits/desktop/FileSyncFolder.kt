@@ -37,6 +37,11 @@ class FileSyncFolder(root: Path) : SyncFolder {
         }
     }
 
+    override fun lastModified(name: String): Long? {
+        val file = dir.resolve(name)
+        return if (Files.exists(file)) Files.getLastModifiedTime(file).toMillis() else null
+    }
+
     override fun write(name: String, text: String) {
         val temp = dir.resolve("$name.tmp")
         GZIPOutputStream(Files.newOutputStream(temp)).use { it.write(text.toByteArray(Charsets.UTF_8)) }

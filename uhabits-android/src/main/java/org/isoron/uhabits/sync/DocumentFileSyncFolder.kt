@@ -68,6 +68,9 @@ class DocumentFileSyncFolder(private val context: Context, treeUri: Uri) : SyncF
         return "${file.length()} bytes, modified $modified"
     }
 
+    override fun lastModified(name: String): Long? =
+        dir.findFile(name)?.lastModified()?.takeIf { it > 0 }
+
     override fun write(name: String, text: String) {
         var file = dir.findFile(name)
         if (file == null) {

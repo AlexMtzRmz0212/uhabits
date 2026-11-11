@@ -151,6 +151,8 @@ class ListHabitsScreen(
         val msg = getExecuteString(command)
         if (msg != null) activity.showMessage(msg)
         refresh()
+        // Send the edit to the sync folder soon, instead of waiting until the app is closed.
+        org.isoron.uhabits.sync.SyncManager.requestSyncSoon(activity.applicationContext)
     }
 
     fun onResult(requestCode: Int, resultCode: Int, data: Intent?) {

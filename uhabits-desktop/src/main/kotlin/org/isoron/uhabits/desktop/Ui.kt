@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -385,7 +386,12 @@ private fun TopBar(model: AppModel, onNew: () -> Unit) {
             model.updateNote?.let { Text(it, color = Color(0xFFE0E0E0), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             TextButton(onClick = { model.checkForUpdateNow() }) { Text("Check for updates", color = Color.White, maxLines = 1, softWrap = false) }
             if (model.folder != null) {
-                Text(model.syncStatus, color = Color(0xFFE0E0E0), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(model.syncStatus, color = Color(0xFFE0E0E0), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (model.syncDetail.isNotEmpty()) {
+                        Text(model.syncDetail, color = Color(0xFFB8D8D8), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 460.dp))
+                    }
+                }
                 Button(enabled = !model.syncing, onClick = { model.syncNow() }) { Text("Sync now", maxLines = 1, softWrap = false) }
                 TextButton(onClick = { pickFolder()?.let { model.chooseFolder(Paths.get(it)) } }) {
                     Text("Folder…", color = Color.White, maxLines = 1, softWrap = false)

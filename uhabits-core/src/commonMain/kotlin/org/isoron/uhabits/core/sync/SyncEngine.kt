@@ -13,6 +13,9 @@ interface SyncFolder {
 
     /** Short text about the file on disk (size, date), for diagnosing sync problems. */
     fun describe(name: String): String? = null
+
+    /** When the file was last changed on disk, in epoch milliseconds, or null if unknown. */
+    fun lastModified(name: String): Long? = null
 }
 
 data class SyncReport(
@@ -25,7 +28,9 @@ data class SyncReport(
     /** How many of those could not be read (for example, still being uploaded). */
     val unreadable: Int = 0,
     /** One line per other device's file: what is on disk and how much of it was read. */
-    val peerInfo: List<String> = emptyList()
+    val peerInfo: List<String> = emptyList(),
+    /** When the newest other-device file was last changed on disk (epoch ms), if the folder can tell. */
+    val peerModified: Long? = null
 ) {
     val changed: Boolean get() = applied > 0
 }
@@ -51,11 +56,13 @@ class SyncEngine(
         var unreadable = 0
         val peerInfo = mutableListOf<String>()
         val errors = mutableListOf<String>()
+        var peerModified: Long? = null
 
         val listing = folder.listFiles()
         peerInfo.add("folder lists ${listing.size}: " + listing.joinToString(",") { it.take(6) })
         for (name in listing.filter { it.endsWith(FILE_SUFFIX) && it != ownFileName }) {
             seen++
+            folder.lastModified(name)?.let { m -> peerModified = maxOf(peerModified ?: m, m) }
             val text = folder.read(name)
             peerInfo.add("${name.take(6)}: ${folder.describe(name) ?: "?"}, read ${text?.length ?: 0} chars")
             if (text == null) {
@@ -81,7 +88,7 @@ class SyncEngine(
             folder.write(ownFileName, text)
             sync.setState(OWN_HASH, hash)
         }
-        return SyncReport(peers, applied, wrote, errors, seen, unreadable, peerInfo)
+        return SyncReport(peers, applied, wrote, errors, seen, unreadable, peerInfo, peerModified)
     }
 
     companion object {
