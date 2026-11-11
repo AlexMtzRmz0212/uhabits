@@ -35,7 +35,21 @@
             android:enabled="true"
             android:icon="@drawable/ic_action_sync_dark"
             android:title="@string/sync_now"
-            app:showAsAction="always"/>
+            app:showAsAction="always">
+            <menu>
+                <item
+                    android:id="@+id/actionSyncUpload"
+                    android:title="@string/sync_upload"/>
+
+                <item
+                    android:id="@+id/actionSyncDownload"
+                    android:title="@string/sync_download"/>
+
+                <item
+                    android:id="@+id/actionSyncBoth"
+                    android:title="@string/sync_both"/>
+            </menu>
+        </item>
 
         <item
             android:id="@+id/actionCreateHabit"

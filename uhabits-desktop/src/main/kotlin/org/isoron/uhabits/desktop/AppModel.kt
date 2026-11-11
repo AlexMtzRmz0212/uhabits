@@ -157,8 +157,11 @@ class AppModel(val dbPath: Path) {
 
     var syncStatus by mutableStateOf("Not syncing")
 
-    /** Second line under [syncStatus]: whether this device's changes were sent and how fresh the other device's file is. */
-    var syncDetail by mutableStateOf("")
+    /** What the last upload did: whether this device's file was sent and where it sits in the folder. */
+    var uploadStatus by mutableStateOf("")
+
+    /** What the last download found: how fresh the other device's file is and what it changed here. */
+    var downloadStatus by mutableStateOf("")
         private set
 
     var error by mutableStateOf<String?>(null)
@@ -595,40 +598,45 @@ class AppModel(val dbPath: Path) {
         desktop = null
     }
 
-    private fun handleReport(report: SyncReport) {
+    /** Shows what a round did. [up] and [down] say which half ran, so the other line keeps its last text. */
+    private fun handleReport(report: SyncReport, up: Boolean = true, down: Boolean = true) {
         if (report.changed) {
             synchronized(lock) { habitList.reloadAndRecompute() }
             revision++
         }
         syncing = false
-        val time = java.time.LocalTime.now().withNano(0).toString().take(5)
-        syncStatus = "Synced at $time"
+        syncStatus = ""
+        val now = System.currentTimeMillis()
         val clock = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
-        syncDetail = SyncSummary.describe(report, System.currentTimeMillis()) {
-            java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).format(clock)
-        }
+        val format = { t: Long -> java.time.Instant.ofEpochMilli(t).atZone(java.time.ZoneId.systemDefault()).format(clock) }
+        val stamp = format(now)
+        if (up) uploadStatus = "$stamp · " + SyncSummary.describeUpload(report, now, format)
+        if (down) downloadStatus = "$stamp · " + SyncSummary.describeDownload(report, now, format)
     }
 
     private fun handleError(e: Exception) {
         syncing = false
         syncStatus = "Sync failed: ${e.message ?: e.javaClass.simpleName}"
-        syncDetail = ""
     }
 
-    /** Runs a round now, in the background. */
-    fun syncNow() {
+    private fun runManual(label: String, up: Boolean, down: Boolean, round: (DesktopSync) -> SyncReport) {
         val d = desktop ?: return
         syncing = true
-        syncStatus = "Syncing…"
-        syncDetail = ""
+        syncStatus = label
         scheduler.execute {
             try {
-                handleReport(d.syncOnce())
+                handleReport(round(d), up, down)
             } catch (e: Exception) {
                 handleError(e)
             }
         }
     }
+
+    /** Sends this device's file now, even if nothing changed, and checks it is in the folder. */
+    fun uploadNow() = runManual("Uploading…", up = true, down = false) { it.uploadOnce(force = true) }
+
+    /** Reads the other devices' files now, without sending anything. */
+    fun downloadNow() = runManual("Downloading…", up = false, down = true) { it.downloadOnce() }
 
     /** Shares a local edit soon, waiting a few seconds so a burst of edits is sent once. */
     private fun syncSoon() {

@@ -143,6 +143,11 @@
     <string name="sync_folder">Sync folder</string>
     <string name="no_sync_folder_selected">Not syncing. Pick a folder shared with your other devices.</string>
     <string name="sync_now">Sync now</string>
+    <string name="sync_upload">Upload (send my changes)</string>
+    <string name="sync_download">Download (get other device)</string>
+    <string name="sync_both">Upload and download</string>
+    <string name="sync_upload_title">Upload</string>
+    <string name="sync_download_title">Download</string>
     <string name="sync_never">Not synced yet</string>
     <string name="sync_running">Syncing…</string>
     <string name="sync_not_set_up">Pick a sync folder first</string>

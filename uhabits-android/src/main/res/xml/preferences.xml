@@ -149,9 +149,20 @@
                 app:iconSpaceReserved="false" />
 
         <Preference
-                android:key="syncNow"
-                android:title="@string/sync_now"
+                android:key="syncUpload"
+                android:title="@string/sync_upload"
                 android:summary="@string/sync_never"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="syncDownload"
+                android:title="@string/sync_download"
+                android:summary="@string/sync_never"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="syncNow"
+                android:title="@string/sync_both"
                 app:iconSpaceReserved="false" />
 
     </PreferenceCategory>

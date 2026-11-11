@@ -23,6 +23,12 @@ class DesktopSync(db: Database, folder: SyncFolder, private val lock: Any = Any(
     val ownFileName: String get() = sync.deviceId + SyncEngine.FILE_SUFFIX
 
     fun syncOnce(): SyncReport = synchronized(lock) { engine.syncOnce() }
+
+    /** Only sends this device's file. [force] rewrites it even if nothing changed, so Drive sees a fresh change. */
+    fun uploadOnce(force: Boolean = true): SyncReport = synchronized(lock) { engine.upload(force) }
+
+    /** Only reads the other devices' files. */
+    fun downloadOnce(): SyncReport = synchronized(lock) { engine.download() }
 }
 
 /**

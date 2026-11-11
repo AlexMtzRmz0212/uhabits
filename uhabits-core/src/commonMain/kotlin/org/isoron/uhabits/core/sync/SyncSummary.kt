@@ -1,8 +1,8 @@
 package org.isoron.uhabits.core.sync
 
 /**
- * Turns a [SyncReport] into the sentence both apps show, so the phone and the PC say the same
- * things: whether this device's changes were sent, and how fresh the other device's file is.
+ * Turns a [SyncReport] into the short sentences both apps show, one for the upload half and one
+ * for the download half, so each says only what its own process did.
  */
 object SyncSummary {
     /** "just now", "5 min ago", "3 h ago", "2 days ago". */
@@ -17,26 +17,37 @@ object SyncSummary {
     }
 
     /**
-     * One line, for example "sent your changes · other device's file from 14:20 (12 min ago), got 2
-     * changes". [clock] formats an epoch-millisecond time as a short clock time.
+     * What the upload did, for example "Sent your changes · file in the folder is from 14:32".
+     * [clock] formats an epoch-millisecond time as a short clock time.
      */
-    fun describe(report: SyncReport, now: Long, clock: (Long) -> String): String {
-        val parts = mutableListOf<String>()
-        parts.add(if (report.wroteOwnFile) "sent your changes" else "your file already current")
+    fun describeUpload(report: SyncReport, now: Long, clock: (Long) -> String): String {
+        val modified = report.ownModified
+        val file = if (modified == null) "" else "file in the folder is from ${clock(modified)} (${age(now - modified)})"
+        return when {
+            report.wroteOwnFile && report.ownVerified == false ->
+                "Wrote your file but could not read it back: check the sync folder"
+            report.wroteOwnFile ->
+                listOf("Sent your changes", file, "Drive uploads it to the cloud next").filter { it.isNotEmpty() }.joinToString(" · ")
+            else ->
+                listOf("Nothing new to send", file).filter { it.isNotEmpty() }.joinToString(" · ")
+        }
+    }
 
+    /**
+     * What the download found, for example "Other device's file from 14:20 (12 min ago) · got 2
+     * changes".
+     */
+    fun describeDownload(report: SyncReport, now: Long, clock: (Long) -> String): String {
+        if (report.peersSeen == 0) return "No other device's file in the folder yet: Drive has not delivered it"
         val modified = report.peerModified
-        parts.add(
-            when {
-                report.peersSeen == 0 -> "no other device's file found yet"
-                modified == null -> "other device's file found, " + got(report)
-                else -> "other device's file from ${clock(modified)} (${age(now - modified)}), " + got(report)
-            }
-        )
+        val file = if (modified == null) "Other device's file found" else "Other device's file from ${clock(modified)} (${age(now - modified)})"
+        val parts = mutableListOf(file, if (report.applied > 0) "got ${report.applied} changes" else "nothing new")
         if (report.unreadable > 0) parts.add("${report.unreadable} file(s) unreadable, probably still uploading")
         report.errors.forEach { parts.add("skipped $it") }
         return parts.joinToString(" · ")
     }
 
-    private fun got(report: SyncReport) =
-        if (report.applied > 0) "got ${report.applied} changes" else "nothing new"
+    /** Both halves on two lines, for a full round. */
+    fun describe(report: SyncReport, now: Long, clock: (Long) -> String): String =
+        "Upload: " + describeUpload(report, now, clock) + "\n" + "Download: " + describeDownload(report, now, clock)
 }

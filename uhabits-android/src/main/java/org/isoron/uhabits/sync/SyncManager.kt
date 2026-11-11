@@ -36,12 +36,16 @@ class SyncManager(context: Context) {
 
     val isEnabled: Boolean get() = folderUri != null
 
-    /** Short text for the settings screen, such as "Last sync: 10:42" or "Failed: ...". */
-    val statusText: String?
-        get() = prefs.getString(PREF_STATUS, null)
+    /** What the last upload did, with its time, for the settings screen. */
+    val uploadStatus: String? get() = prefs.getString(PREF_UP_STATUS, null)
 
-    /** Runs one round and returns a short sentence about it, for a toast. */
-    fun syncNow(): String = synchronized(lock) {
+    /** What the last download did, with its time, for the settings screen. */
+    val downloadStatus: String? get() = prefs.getString(PREF_DOWN_STATUS, null)
+
+    fun syncNow(): String = runRound(Direction.BOTH)
+
+    /** Runs one upload, download or full round and returns a short text about it, for a toast. */
+    fun runRound(direction: Direction): String = synchronized(lock) {
         val uri = folderUri ?: return@synchronized "No sync folder"
         var summary = ""
         lastStart.set(System.currentTimeMillis())
@@ -57,28 +61,39 @@ class SyncManager(context: Context) {
             }
 
             val engine = SyncEngine(factory.database, sync, DocumentFileSyncFolder(context, uri))
-            val report = engine.syncOnce()
-            Log.i(TAG, "Sync done: $report")
+            val now = System.currentTimeMillis()
+            val clock = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+            val format = { t: Long -> clock.format(t) }
+            // A manual upload always rewrites the file, so Drive sees a fresh change to send.
+            val report = when (direction) {
+                Direction.UPLOAD -> engine.upload(force = true)
+                Direction.DOWNLOAD -> engine.download()
+                Direction.BOTH -> engine.syncOnce()
+            }
+            Log.i(TAG, "Sync done ($direction): $report")
 
             if (report.changed) refreshAfterMerge(component.habitList as SQLiteHabitList)
-            val text = describe(report)
-            saveStatus(text)
-            summary = "Synced: $text"
+            val up = SyncSummary.describeUpload(report, now, format)
+            val down = SyncSummary.describeDownload(report, now, format)
+            val stamp = clock.format(now)
+            if (direction != Direction.DOWNLOAD) saveStatus(PREF_UP_STATUS, "$stamp · $up")
+            if (direction != Direction.UPLOAD) saveStatus(PREF_DOWN_STATUS, "$stamp · $down")
+            summary = when (direction) {
+                Direction.UPLOAD -> up
+                Direction.DOWNLOAD -> down
+                Direction.BOTH -> "Upload: $up\nDownload: $down"
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Sync failed", e)
-            summary = "Sync failed: ${e.message ?: e.javaClass.simpleName}"
-            saveStatus("Failed: ${e.message ?: e.javaClass.simpleName}")
+            val message = "Failed: ${e.message ?: e.javaClass.simpleName}"
+            summary = message
+            if (direction != Direction.DOWNLOAD) saveStatus(PREF_UP_STATUS, message)
+            if (direction != Direction.UPLOAD) saveStatus(PREF_DOWN_STATUS, message)
         } finally {
             // An Error (such as out of memory) skips the handlers above; never leave "Syncing…" stuck.
             prefs.edit().putBoolean(PREF_RUNNING, false).apply()
         }
         summary
-    }
-
-    /** What happened, in words the settings screen can show: it must say if the other device's file was not found. */
-    private fun describe(report: org.isoron.uhabits.core.sync.SyncReport): String {
-        val clock = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-        return SyncSummary.describe(report, System.currentTimeMillis()) { clock.format(it) }
     }
 
     private fun refreshAfterMerge(habitList: SQLiteHabitList) {
@@ -91,18 +106,17 @@ class SyncManager(context: Context) {
         }
     }
 
-    private fun saveStatus(result: String) {
-        prefs.edit()
-            .putLong(PREF_LAST_TIME, System.currentTimeMillis())
-            .putString(PREF_STATUS, result)
-            .putBoolean(PREF_RUNNING, false)
-            .apply()
+    private fun saveStatus(key: String, result: String) {
+        prefs.edit().putString(key, result).putBoolean(PREF_RUNNING, false).apply()
     }
+
+    /** Which half of a round to run: only send, only receive, or both. */
+    enum class Direction { UPLOAD, DOWNLOAD, BOTH }
 
     companion object {
         const val PREF_FOLDER = "syncFolder"
-        const val PREF_LAST_TIME = "syncLastTime"
-        const val PREF_STATUS = "syncStatus"
+        const val PREF_UP_STATUS = "syncUploadStatus"
+        const val PREF_DOWN_STATUS = "syncDownloadStatus"
         const val PREF_RUNNING = "syncRunning"
         private const val FIRST_SYNC_BACKUP = "first_sync_backup"
         private const val TAG = "SyncManager"
@@ -139,11 +153,11 @@ class SyncManager(context: Context) {
         }
 
         /** Runs a round right now in the background and calls [onDone] on the main thread with a short summary. */
-        fun syncWithResult(context: Context, onDone: (String) -> Unit) {
+        fun syncWithResult(context: Context, direction: Direction = Direction.BOTH, onDone: (String) -> Unit) {
             val manager = SyncManager(context)
             executor.execute {
                 val summary = try {
-                    manager.syncNow()
+                    manager.runRound(direction)
                 } catch (e: Throwable) {
                     "Sync failed: ${e.message ?: e.javaClass.simpleName}"
                 }

@@ -326,6 +326,39 @@ class SyncEngineTest {
     }
 
     @Test
+    fun testDownloadNeverWritesAndUploadAloneSharesChanges() = twoDevices { a, b, folder ->
+        a.addHabit("u1")
+        a.check("u1", 10)
+
+        // Download with nothing in the folder: reads, writes nothing.
+        val none = a.engine.download()
+        assertFalse(none.wroteOwnFile)
+        assertEquals(0, none.peersSeen)
+        assertEquals(0, folder.files.size)
+
+        // Upload alone puts the file in the folder and verifies it by reading it back.
+        val up = a.engine.upload()
+        assertTrue(up.wroteOwnFile)
+        assertEquals(true, up.ownVerified)
+        assertEquals(1, folder.files.size)
+
+        // B downloads without writing, and gets A's habit.
+        val down = b.engine.download()
+        assertFalse(down.wroteOwnFile)
+        assertEquals(1, down.peersSeen)
+        assertTrue(down.applied > 0)
+        assertEquals(1, folder.files.size)
+    }
+
+    @Test
+    fun testForcedUploadRewritesEvenWhenNothingChanged() = twoDevices { a, _, _ ->
+        a.addHabit("u1")
+        assertTrue(a.engine.upload().wroteOwnFile)
+        assertFalse(a.engine.upload().wroteOwnFile)
+        assertTrue(a.engine.upload(force = true).wroteOwnFile)
+    }
+
+    @Test
     fun testOwnFileIsRewrittenIfDeletedFromFolder() = twoDevices { a, _, folder ->
         a.addHabit("u1")
         a.engine.syncOnce()

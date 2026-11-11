@@ -163,9 +163,15 @@ class SettingsFragment : PreferenceFragmentCompat(), OnSharedPreferenceChangeLis
                 startActivityForResult(intent, SYNC_FOLDER_REQUEST_CODE)
                 return true
             }
-            "syncNow" -> {
+            "syncUpload", "syncDownload", "syncNow" -> {
+                val direction = when (preference.key) {
+                    "syncUpload" -> SyncManager.Direction.UPLOAD
+                    "syncDownload" -> SyncManager.Direction.DOWNLOAD
+                    else -> SyncManager.Direction.BOTH
+                }
                 sharedPrefs?.edit()?.putBoolean(SyncManager.PREF_RUNNING, true)?.apply()
-                SyncManager.requestSync(requireContext(), minGapMillis = 0)
+                // The result lands in the preference summaries through the shared preferences.
+                SyncManager.syncWithResult(requireContext().applicationContext, direction) {}
                 return true
             }
             "publicBackupFolder" -> {
@@ -262,20 +268,16 @@ class SettingsFragment : PreferenceFragmentCompat(), OnSharedPreferenceChangeLis
     private fun updateSyncSummaries() {
         val manager = SyncManager(requireContext())
         val folderPref = findPreference("syncFolder")
-        val nowPref = findPreference("syncNow")
         val uri = manager.folderUri
         folderPref.summary = if (uri == null) getString(R.string.no_sync_folder_selected) else (fullPathFor(uri) ?: uri.toString())
         val running = sharedPrefs?.getBoolean(SyncManager.PREF_RUNNING, false) ?: false
-        nowPref.isEnabled = uri != null && !running
-        val last = sharedPrefs?.getLong(SyncManager.PREF_LAST_TIME, 0L) ?: 0L
-        nowPref.summary = when {
-            running -> getString(R.string.sync_running)
-            last == 0L -> getString(R.string.sync_never)
-            else -> {
-                val time = android.text.format.DateUtils.getRelativeTimeSpanString(last).toString()
-                getString(R.string.sync_last, time, manager.statusText ?: "")
-            }
+        for (key in listOf("syncUpload", "syncDownload", "syncNow")) {
+            findPreference(key)?.isEnabled = uri != null && !running
         }
+        findPreference("syncUpload")?.summary =
+            if (running) getString(R.string.sync_running) else manager.uploadStatus ?: getString(R.string.sync_never)
+        findPreference("syncDownload")?.summary =
+            if (running) getString(R.string.sync_running) else manager.downloadStatus ?: getString(R.string.sync_never)
     }
 
     private fun updatePublicBackupFolderSummary() {
@@ -313,6 +315,6 @@ class SettingsFragment : PreferenceFragmentCompat(), OnSharedPreferenceChangeLis
         private const val RINGTONE_REQUEST_CODE = 1
         private const val PUBLIC_BACKUP_REQUEST_CODE = 2
         private const val SYNC_FOLDER_REQUEST_CODE = 3
-        private val SYNC_STATUS_KEYS = setOf(SyncManager.PREF_RUNNING, SyncManager.PREF_STATUS, SyncManager.PREF_LAST_TIME)
+        private val SYNC_STATUS_KEYS = setOf(SyncManager.PREF_RUNNING, SyncManager.PREF_UP_STATUS, SyncManager.PREF_DOWN_STATUS)
     }
 }

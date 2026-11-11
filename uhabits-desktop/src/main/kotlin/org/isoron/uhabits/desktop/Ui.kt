@@ -386,13 +386,19 @@ private fun TopBar(model: AppModel, onNew: () -> Unit) {
             model.updateNote?.let { Text(it, color = Color(0xFFE0E0E0), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             TextButton(onClick = { model.checkForUpdateNow() }) { Text("Check for updates", color = Color.White, maxLines = 1, softWrap = false) }
             if (model.folder != null) {
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(model.syncStatus, color = Color(0xFFE0E0E0), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (model.syncDetail.isNotEmpty()) {
-                        Text(model.syncDetail, color = Color(0xFFB8D8D8), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 460.dp))
+                Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(max = 520.dp)) {
+                    if (model.syncStatus.isNotEmpty()) {
+                        Text(model.syncStatus, color = Color(0xFFE0E0E0), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (model.uploadStatus.isNotEmpty()) {
+                        Text("↑ " + model.uploadStatus, color = Color(0xFFB8D8D8), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (model.downloadStatus.isNotEmpty()) {
+                        Text("↓ " + model.downloadStatus, color = Color(0xFFB8D8D8), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                Button(enabled = !model.syncing, onClick = { model.syncNow() }) { Text("Sync now", maxLines = 1, softWrap = false) }
+                Button(enabled = !model.syncing, onClick = { model.downloadNow() }) { Text("Download", maxLines = 1, softWrap = false) }
+                Button(enabled = !model.syncing, onClick = { model.uploadNow() }) { Text("Upload", maxLines = 1, softWrap = false) }
                 TextButton(onClick = { pickFolder()?.let { model.chooseFolder(Paths.get(it)) } }) {
                     Text("Folder…", color = Color.White, maxLines = 1, softWrap = false)
                 }

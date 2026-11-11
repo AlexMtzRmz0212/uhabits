@@ -30,14 +30,18 @@ data class SyncReport(
     /** One line per other device's file: what is on disk and how much of it was read. */
     val peerInfo: List<String> = emptyList(),
     /** When the newest other-device file was last changed on disk (epoch ms), if the folder can tell. */
-    val peerModified: Long? = null
+    val peerModified: Long? = null,
+    /** When this device's own file was last changed on disk (epoch ms), if the folder can tell. */
+    val ownModified: Long? = null,
+    /** After writing this device's own file: whether reading it back gave the same content. Null if nothing was written. */
+    val ownVerified: Boolean? = null
 ) {
     val changed: Boolean get() = applied > 0
 }
 
 /**
- * Runs one sync round: merge every peer file that changed since the last round, then write this
- * device's own file if its content changed. Safe to run at any time and any number of times.
+ * Runs sync rounds. [download] merges the other devices' files into this device, [upload] writes
+ * this device's own file, and [syncOnce] does both. Safe to run at any time and any number of times.
  */
 class SyncEngine(
     private val db: Database,
@@ -49,7 +53,8 @@ class SyncEngine(
 
     private val ownFileName get() = sync.deviceId + FILE_SUFFIX
 
-    fun syncOnce(): SyncReport {
+    /** Merges every peer file that changed since the last round. Never writes to the folder. */
+    fun download(): SyncReport {
         var peers = 0
         var applied = 0
         var seen = 0
@@ -79,16 +84,42 @@ class SyncEngine(
                 errors.add("$name: ${e.message}")
             }
         }
+        return SyncReport(peers, applied, false, errors, seen, unreadable, peerInfo, peerModified)
+    }
 
+    /**
+     * Writes this device's own file if its content changed, or always when [force] is true, then
+     * reads it back to check it really is in the folder.
+     */
+    fun upload(force: Boolean = false): SyncReport {
         val text = SyncFile.encode(exporter.snapshot())
         val hash = hash(text)
         val missing = ownFileName !in folder.listFiles()
-        val wrote = missing || sync.getState(OWN_HASH) != hash
+        val wrote = force || missing || sync.getState(OWN_HASH) != hash
+        var verified: Boolean? = null
         if (wrote) {
             folder.write(ownFileName, text)
             sync.setState(OWN_HASH, hash)
+            verified = folder.read(ownFileName)?.let { hash(it) == hash } ?: false
         }
-        return SyncReport(peers, applied, wrote, errors, seen, unreadable, peerInfo, peerModified)
+        return SyncReport(
+            0,
+            0,
+            wrote,
+            emptyList(),
+            ownModified = folder.lastModified(ownFileName),
+            ownVerified = verified
+        )
+    }
+
+    fun syncOnce(): SyncReport {
+        val down = download()
+        val up = upload()
+        return down.copy(
+            wroteOwnFile = up.wroteOwnFile,
+            ownModified = up.ownModified,
+            ownVerified = up.ownVerified
+        )
     }
 
     companion object {

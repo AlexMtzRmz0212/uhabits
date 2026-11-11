@@ -66,7 +66,7 @@ class ListHabitsMenu(
      * Runs a sync round and blocks the whole screen, with a spinner, until it finishes. The other
      * device's changes are on the list when the spinner goes away.
      */
-    private fun syncAndWait() {
+    private fun syncAndWait(direction: SyncManager.Direction) {
         if (!SyncManager(activity).isEnabled) {
             Toast.makeText(activity, R.string.sync_not_set_up, Toast.LENGTH_LONG).show()
             behavior.onViewSettings()
@@ -91,13 +91,24 @@ class ListHabitsMenu(
             .setCancelable(false)
             .create()
         dialog.show()
-        SyncManager.syncWithResult(activity) { summary ->
+        SyncManager.syncWithResult(activity, direction) { summary ->
             try {
                 if (dialog.isShowing) dialog.dismiss()
-            } catch (e: IllegalArgumentException) {
-                // The screen was closed or rotated while syncing; nothing left to dismiss.
+                // A dialog, not a toast: the text is long and stays until read.
+                val title = when (direction) {
+                    SyncManager.Direction.UPLOAD -> R.string.sync_upload_title
+                    SyncManager.Direction.DOWNLOAD -> R.string.sync_download_title
+                    SyncManager.Direction.BOTH -> R.string.sync_both
+                }
+                AlertDialog.Builder(activity)
+                    .setTitle(title)
+                    .setMessage(summary)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+            } catch (e: Exception) {
+                // The screen was closed or rotated while syncing; nothing left to show it on.
+                Toast.makeText(activity.applicationContext, summary, Toast.LENGTH_LONG).show()
             }
-            Toast.makeText(activity.applicationContext, summary, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -170,10 +181,22 @@ class ListHabitsMenu(
                 return true
             }
 
-            R.id.actionSync -> {
-                syncAndWait()
+            R.id.actionSyncUpload -> {
+                syncAndWait(SyncManager.Direction.UPLOAD)
                 return true
             }
+
+            R.id.actionSyncDownload -> {
+                syncAndWait(SyncManager.Direction.DOWNLOAD)
+                return true
+            }
+
+            R.id.actionSyncBoth -> {
+                syncAndWait(SyncManager.Direction.BOTH)
+                return true
+            }
+
+            R.id.actionSync -> return true
 
             R.id.actionFAQ -> {
                 behavior.onViewFAQ()
